@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ post['title'] }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+        nav {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        nav ul {
+            list-style: none;
+            display: flex;
+            gap: 2rem;
+        }
+        nav a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        nav a:hover {
+            color: #3498db;
+        }
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        .post-view {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+        .post-header {
+            padding: 2rem;
+            border-bottom: 2px solid #ecf0f1;
+        }
+        .post-title {
+            font-size: 2rem;
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+        .post-meta {
+            color: #7f8c8d;
+            font-size: 0.95rem;
+        }
+        .post-meta span {
+            margin-right: 1.5rem;
+        }
+        .post-content {
+            padding: 2rem;
+            font-size: 1.05rem;
+            line-height: 1.8;
+            word-wrap: break-word;
+        }
+        .post-content img {
+            max-width: 100%;
+            height: auto;
+            margin: 1rem 0;
+            border-radius: 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .post-content p {
+            margin-bottom: 1rem;
+        }
+        .post-content h1, .post-content h2, .post-content h3 {
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .post-content ul, .post-content ol {
+            margin-left: 2rem;
+            margin-bottom: 1rem;
+        }
+        .post-content blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 1rem;
+            margin: 1rem 0;
+            color: #555;
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 0 5px 5px 0;
+        }
+        .post-content pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 1rem;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        .post-content code {
+            background: #f0f0f0;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .post-content pre code {
+            background: none;
+            padding: 0;
+        }
+        .post-file {
+            padding: 1.5rem 2rem;
+            background: #f8f9fa;
+            border-top: 1px solid #ecf0f1;
+        }
+        .file-download {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.8rem 1.5rem;
+            background: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        .file-download:hover {
+            background: #2980b9;
+        }
+        .post-actions {
+            padding: 1.5rem 2rem;
+            background: #f8f9fa;
+            border-top: 1px solid #ecf0f1;
+            display: flex;
+            gap: 1rem;
+        }
+        .btn {
+            display: inline-block;
+            padding: 0.8rem 1.5rem;
+            border-radius: 5px;
+            text-decoration: none;
+            transition: background 0.3s;
+            cursor: pointer;
+            border: none;
+            font-size: 1rem;
+        }
+        .btn-primary {
+            background: #95a5a6;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #7f8c8d;
+        }
+        .btn-edit {
+            background: #3498db;
+            color: white;
+        }
+        .btn-edit:hover {
+            background: #2980b9;
+        }
+        .btn-delete {
+            background: #e74c3c;
+            color: white;
+        }
+        .btn-delete:hover {
+            background: #c0392b;
+        }
+        .comments-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .comments-header {
+            padding: 1.5rem 2rem;
+            background: #f8f9fa;
+            border-bottom: 2px solid #ecf0f1;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .comment-list {
+            padding: 1rem 0;
+        }
+        .comment-item {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        .comment-item:last-child {
+            border-bottom: none;
+        }
+        .comment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.8rem;
+        }
+        .comment-author {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .comment-date {
+            color: #7f8c8d;
+            font-size: 0.85rem;
+        }
+        .comment-content {
+            color: #555;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            margin-bottom: 0.5rem;
+        }
+        .comment-delete-btn {
+            font-size: 0.85rem;
+            padding: 0.4rem 0.8rem;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .comment-delete-btn:hover {
+            background: #c0392b;
+        }
+        .comment-form {
+            padding: 2rem;
+            background: #f8f9fa;
+            border-top: 2px solid #ecf0f1;
+        }
+        .comment-form h3 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.3rem;
+            color: #555;
+            font-size: 0.9rem;
+        }
+        input[type="text"],
+        input[type="password"],
+        textarea {
+            width: 100%;
+            padding: 0.6rem;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 0.95rem;
+            font-family: inherit;
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        .empty-comments {
+            padding: 3rem 2rem;
+            text-align: center;
+            color: #7f8c8d;
+        }
+        .flash-messages {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .flash {
+            padding: 1rem 1.5rem;
+            margin-bottom: 0.5rem;
+            border-radius: 5px;
+            color: white;
+            animation: slideIn 0.3s ease-out;
+        }
+        .flash.success {
+            background: #27ae60;
+        }
+        .flash.error {
+            background: #e74c3c;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            max-width: 400px;
+            width: 90%;
+        }
+        .modal-content h3 {
+            margin-bottom: 1rem;
+            color: #2c3e50;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+
+    <nav>
+        <ul>
+            <li><a href="/">홈</a></li>
+            <li><a href="/board/free">자유게시판</a></li>
+            <li><a href="/board/project">프로젝트게시판</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <div class="post-view">
+            <div class="post-header">
+                <h1 class="post-title">{{ post['title'] }}</h1>
+                <div class="post-meta">
+                    <span>👤 작성자: {{ post['author'] }}</span>
+                    <span>📅 작성일: {{ post['created_at'][:16] }}</span>
+                </div>
+            </div>
+
+            <div class="post-content">
+                {{ post['content']|safe }}
+            </div>
+
+            {% if post['filename'] %}
+            <div class="post-file">
+                <a href="/uploads/{{ post['filename'] }}" class="file-download" download>
+                    📎 첨부파일 다운로드: {{ post['filename'] }}
+                </a>
+            </div>
+            {% endif %}
+
+            <div class="post-actions">
+                <a href="/board/{{ post['board_type'] }}" class="btn btn-primary">목록으로</a>
+                <button onclick="openEditModal()" class="btn btn-edit">수정</button>
+                <button onclick="openDeleteModal()" class="btn btn-delete">삭제</button>
+            </div>
+        </div>
+
+        <!-- 댓글 섹션 -->
+        <div class="comments-section">
+            <div class="comments-header">
+                💬 댓글 ({{ comments|length }})
+            </div>
+            
+            {% if comments %}
+            <div class="comment-list">
+                {% for comment in comments %}
+                <div class="comment-item">
+                    <div class="comment-header">
+                        <div>
+                            <span class="comment-author">{{ comment['author'] }}</span>
+                            <span class="comment-date">{{ comment['created_at'][:16] }}</span>
+                        </div>
+                        <button onclick="openCommentDeleteModal({{ comment['id'] }})" class="comment-delete-btn">삭제</button>
+                    </div>
+                    <div class="comment-content">{{ comment['content'] }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-comments">
+                아직 댓글이 없습니다. 첫 댓글을 작성해보세요!
+            </div>
+            {% endif %}
+
+            <div class="comment-form">
+                <h3>댓글 작성</h3>
+                <form method="POST" action="/post/{{ post['id'] }}/comment">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="comment-author">작성자 *</label>
+                            <input type="text" id="comment-author" name="author" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="comment-password">비밀번호 *</label>
+                            <input type="password" id="comment-password" name="password" required minlength="4">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="comment-content">내용 *</label>
+                        <textarea id="comment-content" name="content" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">댓글 작성</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 수정 모달 -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <h3>게시글 수정</h3>
+            <p>수정하려면 비밀번호를 입력하세요.</p>
+            <p style="font-size: 0.85rem; color: #e74c3c; margin-top: 0.5rem;">※ 관리자 비밀번호로도 수정 가능합니다.</p>
+            <form method="GET" action="/post/{{ post['id'] }}/edit">
+                <div class="form-group">
+                    <label for="edit-password">비밀번호</label>
+                    <input type="password" id="edit-password" name="check" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-edit">확인</button>
+                    <button type="button" onclick="closeEditModal()" class="btn btn-primary">취소</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 삭제 모달 -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <h3>게시글 삭제</h3>
+            <p>정말 삭제하시겠습니까?</p>
+            <p style="font-size: 0.85rem; color: #e74c3c; margin-top: 0.5rem;">※ 관리자 비밀번호로도 삭제 가능합니다.</p>
+            <form method="POST" action="/post/{{ post['id'] }}/delete">
+                <div class="form-group">
+                    <label for="delete-password">비밀번호</label>
+                    <input type="password" id="delete-password" name="password" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-delete">삭제</button>
+                    <button type="button" onclick="closeDeleteModal()" class="btn btn-primary">취소</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 댓글 삭제 모달 -->
+    <div id="commentDeleteModal" class="modal">
+        <div class="modal-content">
+            <h3>댓글 삭제</h3>
+            <p>정말 삭제하시겠습니까?</p>
+            <p style="font-size: 0.85rem; color: #e74c3c; margin-top: 0.5rem;">※ 관리자 비밀번호로도 삭제 가능합니다.</p>
+            <form id="commentDeleteForm" method="POST">
+                <div class="form-group">
+                    <label for="comment-delete-password">비밀번호</label>
+                    <input type="password" id="comment-delete-password" name="password" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-delete">삭제</button>
+                    <button type="button" onclick="closeCommentDeleteModal()" class="btn btn-primary">취소</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openEditModal() {
+            document.getElementById('editModal').classList.add('active');
+        }
+        function closeEditModal() {
+            document.getElementById('editModal').classList.remove('active');
+        }
+        function openDeleteModal() {
+            document.getElementById('deleteModal').classList.add('active');
+        }
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').classList.remove('active');
+        }
+        function openCommentDeleteModal(commentId) {
+            const modal = document.getElementById('commentDeleteModal');
+            const form = document.getElementById('commentDeleteForm');
+            form.action = '/comment/' + commentId + '/delete';
+            modal.classList.add('active');
+        }
+        function closeCommentDeleteModal() {
+            document.getElementById('commentDeleteModal').classList.remove('active');
+        }
+        
+        // 모달 외부 클릭 시 닫기
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.classList.remove('active');
+            }
+        }
+
+        // 플래시 메시지 자동 숨김
+        setTimeout(() => {
+            const flashes = document.querySelectorAll('.flash');
+            flashes.forEach(flash => {
+                flash.style.opacity = '0';
+                flash.style.transition = 'opacity 0.3s';
+            });
+            setTimeout(() => {
+                flashes.forEach(flash => flash.remove());
+            }, 300);
+        }, 3000);
+    </script>
+</body>
+</html>
