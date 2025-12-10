@@ -5,140 +5,58 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ board_name }}</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: #f5f5f5;
-        }
-        nav {
-            background: #2c3e50;
-            color: white;
-            padding: 1rem 2rem;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        nav ul {
-            list-style: none;
-            display: flex;
-            gap: 2rem;
-        }
-        nav a {
-            color: white;
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.3s;
-        }
-        nav a:hover {
-            color: #3498db;
-        }
-        .container {
-            max-width: 1000px;
-            margin: 2rem auto;
-            padding: 0 2rem;
-        }
-        .board-header {
-            background: white;
-            padding: 2rem;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .board-header h1 {
-            color: #2c3e50;
-        }
-        .btn {
-            display: inline-block;
-            padding: 0.8rem 1.5rem;
-            background: #3498db;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            transition: background 0.3s;
-        }
-        .btn:hover {
-            background: #2980b9;
-        }
-        .post-list {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
+        nav { background: #2c3e50; color: white; padding: 1rem 2rem; }
+        nav ul { list-style: none; display: flex; gap: 2rem; }
+        nav a { color: white; text-decoration: none; font-weight: 500; transition: color 0.3s; }
+        nav a:hover { color: #3498db; }
+        .container { max-width: 1000px; margin: 2rem auto; padding: 0 2rem; }
+        .board-header { background: white; padding: 2rem; border-radius: 10px; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .btn { padding: 0.8rem 1.5rem; background: #3498db; color: white; text-decoration: none; border-radius: 5px; transition: background 0.3s; }
+        .btn:hover { background: #2980b9; }
+        .post-list { background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        
+        /* 썸네일 기능 */
         .post-item {
             padding: 1.5rem;
             border-bottom: 1px solid #ecf0f1;
+            cursor: pointer;
             transition: background 0.2s;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
         }
-        .post-item:hover {
-            background: #f8f9fa;
+        .post-item:hover { background: #f8f9fa; }
+        .post-thumbnail {
+            width: 80px;
+            height: 80px;
+            flex-shrink: 0;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #e0e0e0;
         }
-        .post-item:last-child {
-            border-bottom: none;
+        .post-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
-        .post-title {
-            font-size: 1.2rem;
-            color: #2c3e50;
-            text-decoration: none;
-            font-weight: 600;
-            display: block;
-            margin-bottom: 0.5rem;
+        .post-thumbnail.placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: #999;
         }
-        .post-title:hover {
-            color: #3498db;
-        }
-        .post-meta {
-            color: #7f8c8d;
-            font-size: 0.9rem;
-        }
-        .post-meta span {
-            margin-right: 1rem;
-        }
-        .file-icon {
-            color: #3498db;
-            margin-left: 0.5rem;
-        }
-        .empty-message {
-            text-align: center;
-            padding: 3rem;
-            color: #7f8c8d;
-        }
-        .flash-messages {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
-        }
-        .flash {
-            padding: 1rem 1.5rem;
-            margin-bottom: 0.5rem;
-            border-radius: 5px;
-            color: white;
-            animation: slideIn 0.3s ease-out;
-        }
-        .flash.success {
-            background: #27ae60;
-        }
-        .flash.error {
-            background: #e74c3c;
-        }
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
+        .post-content-wrapper { flex: 1; min-width: 0; }
+        .post-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .post-meta { color: #7f8c8d; font-size: 0.9rem; }
+        .post-meta span { margin-right: 1rem; }
+        .empty-message { text-align: center; padding: 3rem; color: #7f8c8d; }
+        .flash-messages { position: fixed; top: 20px; right: 20px; z-index: 1000; }
+        .flash { padding: 1rem 1.5rem; margin-bottom: 0.5rem; border-radius: 5px; color: white; }
+        .flash.success { background: #27ae60; }
+        .flash.error { background: #e74c3c; }
     </style>
 </head>
 <body>
@@ -154,54 +72,58 @@
 
     <nav>
         <ul>
-            <li><a href="/">홈</a></li>
-            <li><a href="/board/free">자유게시판</a></li>
-            <li><a href="/board/project">프로젝트게시판</a></li>
+            <li><a href="/">🏠 홈</a></li>
+            <li><a href="/board/free">💬 자유게시판</a></li>
+            <li><a href="/board/project">📁 프로젝트게시판</a></li>
         </ul>
     </nav>
 
     <div class="container">
         <div class="board-header">
-            <h1>{{ board_name }}</h1>
-            <a href="/write/{{ board_type }}" class="btn">글쓰기</a>
+            <div>
+                <h1>{{ board_name }}</h1>
+                <p style="color: #666; margin-top: 0.5rem;">총 {{ posts|length }}개의 게시글</p>
+            </div>
+            <a href="/write/{{ board_type }}" class="btn">✍️ 글쓰기</a>
         </div>
 
         <div class="post-list">
             {% if posts %}
                 {% for post in posts %}
-                <div class="post-item">
-                    <a href="/post/{{ post['id'] }}" class="post-title">
-                        {{ post['title'] }}
-                        {% if post['filename'] %}
-                        <span class="file-icon">📎</span>
+                <div class="post-item" onclick="location.href='/post/{{ post['id'] }}'">
+                    <!-- 썸네일 -->
+                    <div class="post-thumbnail {% if not post['cloudinary_url'] %}placeholder{% endif %}">
+                        {% if post['cloudinary_url'] %}
+                            <img src="{{ post['cloudinary_url'] }}" alt="썸네일">
+                        {% else %}
+                            📄
                         {% endif %}
-                    </a>
-                    <div class="post-meta">
-                        <span>👤 {{ post['author'] }}</span>
-                        <span>📅 {{ post['created_at'].strftime('%Y-%m-%d %H:%M') if post['created_at'].__class__.__name__ == 'datetime' else post['created_at'][:16] }}</span>
+                    </div>
+                    
+                    <div class="post-content-wrapper">
+                        <div class="post-title">
+                            {{ post['title'] }}
+                            {% if post['filename'] %}📎{% endif %}
+                        </div>
+                        <div class="post-meta">
+                            <span>👤 {{ post['author'] }}</span>
+                            <span>📅 {{ post['created_at'].strftime('%Y-%m-%d %H:%M') if post['created_at'].__class__.__name__ == 'datetime' else post['created_at'][:16] }}</span>
+                        </div>
                     </div>
                 </div>
                 {% endfor %}
             {% else %}
                 <div class="empty-message">
-                    <p>아직 작성된 게시글이 없습니다.</p>
-                    <p>첫 번째 게시글을 작성해보세요!</p>
+                    <p>아직 게시글이 없습니다.</p>
+                    <a href="/write/{{ board_type }}" class="btn">첫 게시글 작성하기</a>
                 </div>
             {% endif %}
         </div>
     </div>
 
     <script>
-        // 플래시 메시지 자동 숨김
         setTimeout(() => {
-            const flashes = document.querySelectorAll('.flash');
-            flashes.forEach(flash => {
-                flash.style.opacity = '0';
-                flash.style.transition = 'opacity 0.3s';
-            });
-            setTimeout(() => {
-                flashes.forEach(flash => flash.remove());
-            }, 300);
+            document.querySelectorAll('.flash').forEach(f => f.remove());
         }, 3000);
     </script>
 </body>
