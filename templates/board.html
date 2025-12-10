@@ -178,7 +178,7 @@
                     </a>
                     <div class="post-meta">
                         <span>👤 {{ post['author'] }}</span>
-                        <span>📅 {{ post['created_at'][:16] }}</span>
+                        <span>📅 {{ post['created_at'].strftime('%Y-%m-%d %H:%M') if post['created_at'].__class__.__name__ == 'datetime' else post['created_at'][:16] }}</span>
                     </div>
                 </div>
                 {% endfor %}
