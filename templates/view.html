@@ -392,7 +392,7 @@
                     <div class="comment-header">
                         <div>
                             <span class="comment-author">{{ comment['author'] }}</span>
-                            <span class="comment-date">{{ comment['created_at'][:16] }}</span>
+                            <span class="comment-date">{{ comment['created_at'].strftime('%Y-%m-%d %H:%M') if comment['created_at'].__class__.__name__ == 'datetime' else comment['created_at'][:16]}}</span>
                         </div>
                         <button onclick="openCommentDeleteModal({{ comment['id'] }})" class="comment-delete-btn">삭제</button>
                     </div>
