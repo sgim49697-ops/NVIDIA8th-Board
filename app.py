@@ -41,7 +41,8 @@ app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME')
-app.config['MAIL_TIMEOUT'] = 50
+app.config['MAIL_MAX_EMAILS'] = None
+app.config['MAIL_TIMEOUT'] = 120  # 타임아웃 30초 설정
 
 if not app.config['MAIL_USERNAME'] or not app.config['MAIL_PASSWORD']:
     raise ValueError("❌ MAIL_USERNAME 또는 MAIL_PASSWORD 환경변수가 설정되지 않았습니다!")
@@ -76,19 +77,6 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def extract_first_image(html_content):
-    """HTML 콘텐츠에서 첫 번째 이미지 URL 추출"""
-    if not html_content:
-        return None
-    
-    # <img> 태그에서 src 추출
-    img_pattern = r'<img[^>]+src=["\']([^"\']+)["\']'
-    match = re.search(img_pattern, html_content, re.IGNORECASE)
-    
-    if match:
-        return match.group(1)
-    return None
-
 def init_db():
     """데이터베이스 초기화 (PostgreSQL 전용)"""
     conn = get_db_connection()
@@ -113,14 +101,14 @@ def init_db():
             id SERIAL PRIMARY KEY,
             board_type VARCHAR(20) NOT NULL,
             title VARCHAR(200) NOT NULL,
-            author VARCHAR(50) NOT NULL,
+            author VARCHAR(100) NOT NULL,
             password VARCHAR(200),
-            content TEXT NOT NULL,
+            content TEXT,
             filename VARCHAR(200),
-            cloudinary_url VARCHAR(500),
-            cloudinary_public_id VARCHAR(200),
-            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-            ip_address VARCHAR(50),
+            cloudinary_url TEXT,
+            cloudinary_public_id TEXT,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            ip_address VARCHAR(45),
             user_agent TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -130,13 +118,13 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS comments (
             id SERIAL PRIMARY KEY,
-            post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-            author VARCHAR(50) NOT NULL,
+            post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+            parent_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,
+            author VARCHAR(100) NOT NULL,
             password VARCHAR(200),
             content TEXT NOT NULL,
-            parent_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,
-            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-            ip_address VARCHAR(50),
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            ip_address VARCHAR(45),
             user_agent TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -145,11 +133,9 @@ def init_db():
     conn.commit()
     cursor.close()
     conn.close()
-    print("✅ 데이터베이스 초기화 완료!")
+    print("✅ PostgreSQL 데이터베이스 초기화 완료")
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# ==================== 회원 시스템 ====================
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -157,56 +143,64 @@ def register():
         username = request.form['username']
         email = request.form['email']
         password = request.form['password']
-        
-        # 한글, 영문, 숫자, 밑줄(_)만 허용 (3-50자)
+
+        # 아이디 유효성 검사 (한글, 영문, 숫자, 밑줄 허용)
         if not re.match(r'^[가-힣a-zA-Z0-9_]{3,50}$', username):
             flash('아이디는 한글, 영문, 숫자, 밑줄(_)만 사용 가능합니다 (3-50자)', 'error')
             return redirect(url_for('register'))
-        
+
         if len(password) < 8:
             flash('비밀번호는 8자 이상이어야 합니다.', 'error')
             return redirect(url_for('register'))
         
-        hashed_password = generate_password_hash(password)
+        password_hash = generate_password_hash(password)
         token = serializer.dumps(email, salt='email-confirm')
         
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
-            cursor.execute(
-                'INSERT INTO users (username, email, password, verification_token) VALUES (%s, %s, %s, %s)',
-                (username, email, hashed_password, token)
-            )
+            cursor.execute('''
+                INSERT INTO users (username, email, password, verification_token)
+                VALUES (%s, %s, %s, %s)
+            ''', (username, email, password_hash, token))
+            
             conn.commit()
             
-            # 이메일 전송
-            confirm_url = url_for('confirm_email', token=token, _external=True)
-            msg = Message('이메일 인증', recipients=[email])
-            msg.body = f'다음 링크를 클릭하여 이메일을 인증해주세요:\n{confirm_url}\n\n이 링크는 1시간 동안 유효합니다.'
+            # 이메일 발송을 별도로 try-except 처리
             try:
+                # 인증 이메일 발송
+                confirm_url = url_for('confirm_email', token=token, _external=True)
+                msg = Message('NVIDIA 8th 게시판 - 이메일 인증', recipients=[email])
+                msg.body = f'''
+안녕하세요 {username}님,
+
+NVIDIA 8th 게시판 가입을 환영합니다!
+
+아래 링크를 클릭하여 이메일을 인증해주세요:
+{confirm_url}
+
+※ 이 링크는 1시간 동안 유효합니다.
+
+감사합니다.
+'''
                 mail.send(msg)
-                flash('인증 이메일이 발송되었습니다.', 'success')
+                flash('인증 이메일이 발송되었습니다. 이메일을 확인해주세요.', 'success')
+                
             except Exception as mail_error:
-                print(f"❌ 이메일 발송 실패: {mail_error}")
-                flash('회원가입은 완료되었으나 이메일 발송 실패.', 'warning')
+                # 이메일 발송 실패해도 회원가입은 완료됨
+                print(f"❌ 이메일 발송 실패: {type(mail_error).__name__}: {str(mail_error)}")
+                flash('회원가입은 완료되었으나 인증 이메일 발송에 실패했습니다. 관리자에게 문의하세요.', 'warning')
             
-            flash('회원가입이 완료되었습니다! 이메일을 확인하여 인증을 완료해주세요.', 'success')
             return redirect(url_for('login'))
             
-        except psycopg2.IntegrityError as e:
+        except Exception as e:
             conn.rollback()
-            if 'username' in str(e):
-                flash('이미 사용 중인 아이디입니다.', 'error')
-            elif 'email' in str(e):
-                flash('이미 사용 중인 이메일입니다.', 'error')
-            else:
-                flash('회원가입 중 오류가 발생했습니다.', 'error')
+            print(f"❌ 회원가입 오류: {type(e).__name__}: {str(e)}")
+            flash(f'회원가입 실패: {str(e)}', 'error')
         finally:
             cursor.close()
             conn.close()
-        
-        return redirect(url_for('register'))
     
     return render_template('register.html')
 
@@ -215,21 +209,26 @@ def confirm_email(token):
     try:
         email = serializer.loads(token, salt='email-confirm', max_age=3600)
     except SignatureExpired:
-        flash('인증 링크가 만료되었습니다.', 'error')
-        return redirect(url_for('login'))
+        flash('인증 링크가 만료되었습니다. 다시 가입해주세요.', 'error')
+        return redirect(url_for('register'))
+    except:
+        flash('잘못된 인증 링크입니다.', 'error')
+        return redirect(url_for('register'))
     
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute(
-        'UPDATE users SET email_verified = TRUE, verification_token = NULL WHERE email = %s',
-        (email,)
-    )
+    cursor.execute('''
+        UPDATE users 
+        SET email_verified = TRUE, verification_token = NULL
+        WHERE email = %s
+    ''', (email,))
+    
     conn.commit()
     cursor.close()
     conn.close()
     
-    flash('이메일 인증이 완료되었습니다! 로그인해주세요.', 'success')
+    flash('이메일 인증이 완료되었습니다. 로그인해주세요.', 'success')
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -247,25 +246,28 @@ def login():
         cursor.close()
         conn.close()
         
-        if user and check_password_hash(user['password'], password):
-            if not user['email_verified']:
-                flash('이메일 인증이 필요합니다. 이메일을 확인해주세요.', 'error')
-                return redirect(url_for('login'))
-            
-            session['user_id'] = user['id']
-            session['username'] = user['username']
-            flash('로그인되었습니다.', 'success')
-            return redirect(url_for('index'))
+        if user:
+            user = dict(user)
+            if check_password_hash(user['password'], password):
+                if not user['email_verified']:
+                    flash('이메일 인증을 먼저 완료해주세요.', 'error')
+                    return redirect(url_for('login'))
+                
+                session['user_id'] = user['id']
+                session['username'] = user['username']
+                flash(f'{username}님 환영합니다!', 'success')
+                return redirect(url_for('index'))
         
         flash('아이디 또는 비밀번호가 일치하지 않습니다.', 'error')
-        return redirect(url_for('login'))
     
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
+    username = session.get('username')
     session.clear()
-    flash('로그아웃되었습니다.', 'success')
+    if username:
+        flash(f'{username}님 로그아웃되었습니다.', 'success')
     return redirect(url_for('index'))
 
 @app.route('/user/<int:user_id>')
@@ -273,7 +275,7 @@ def user_profile(user_id):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     
-    cursor.execute('SELECT id, username, email, created_at FROM users WHERE id = %s', (user_id,))
+    cursor.execute('SELECT id, username, created_at FROM users WHERE id = %s', (user_id,))
     user = cursor.fetchone()
     
     if not user:
@@ -281,18 +283,51 @@ def user_profile(user_id):
         conn.close()
         return "사용자를 찾을 수 없습니다.", 404
     
-    cursor.execute(
-        'SELECT * FROM posts WHERE user_id = %s ORDER BY created_at DESC',
-        (user_id,)
-    )
+    user = dict(user)
+    
+    # 작성 글
+    cursor.execute('''
+        SELECT id, title, board_type, created_at 
+        FROM posts 
+        WHERE user_id = %s 
+        ORDER BY created_at DESC
+        LIMIT 20
+    ''', (user_id,))
     posts = [dict(row) for row in cursor.fetchall()]
+    
+    # 작성 댓글
+    cursor.execute('''
+        SELECT c.id, c.content, c.created_at, p.id as post_id, p.title as post_title
+        FROM comments c
+        JOIN posts p ON c.post_id = p.id
+        WHERE c.user_id = %s
+        ORDER BY c.created_at DESC
+        LIMIT 20
+    ''', (user_id,))
+    comments = [dict(row) for row in cursor.fetchall()]
     
     cursor.close()
     conn.close()
     
-    is_own_profile = session.get('user_id') == user_id
+    return render_template('user_profile.html', user=user, posts=posts, comments=comments)
+
+# ==================== 게시판 ====================
+
+@app.route('/')
+def index():
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     
-    return render_template('user_profile.html', user=dict(user), posts=posts, is_own_profile=is_own_profile)
+    cursor.execute(
+        "SELECT * FROM posts WHERE board_type = %s ORDER BY created_at DESC LIMIT 5",
+        ('project',)
+    )
+    recent_projects = [dict(row) for row in cursor.fetchall()]
+    
+    cursor.close()
+    conn.close()
+    
+    return render_template('index.html', recent_projects=recent_projects)
 
 @app.route('/board/<board_type>')
 def board(board_type):
@@ -310,19 +345,6 @@ def board(board_type):
     )
     posts = [dict(row) for row in cursor.fetchall()]
     
-    # 각 게시글에 썸네일 추가 (본문 이미지 우선, 없으면 첨부 파일)
-    for post in posts:
-        # 1순위: 본문에서 첫 번째 이미지 추출
-        content_image = extract_first_image(post.get('content', ''))
-        
-        if content_image:
-            post['thumbnail'] = content_image
-        elif post.get('cloudinary_url'):
-            # 2순위: 첨부 파일
-            post['thumbnail'] = post['cloudinary_url']
-        else:
-            post['thumbnail'] = None
-    
     cursor.close()
     conn.close()
     
@@ -334,21 +356,22 @@ def write(board_type):
         return "잘못된 게시판입니다.", 404
     
     if request.method == 'POST':
-        # ⭐ 익명 사용자 글 작성 제한 추가
-        if 'user_id' not in session:
-            flash('로그인 후 글을 작성할 수 있습니다.', 'error')
-            return redirect(url_for('login'))
-        
         title = request.form['title']
         content = request.form['content']
         
         ip_address = get_client_ip()
         user_agent = request.headers.get('User-Agent', '')
         
-        # 로그인 사용자만 글 작성 가능
-        user_id = session['user_id']
-        author = session['username']
-        password_hash = None
+        # 로그인 여부에 따라 처리
+        if 'user_id' in session:
+            user_id = session['user_id']
+            author = session['username']
+            password_hash = None
+        else:
+            user_id = None
+            author = request.form['author']
+            password = request.form['password']
+            password_hash = generate_password_hash(password)
         
         file = request.files.get('file')
         cloudinary_url = None
@@ -388,12 +411,6 @@ def write(board_type):
     
     board_name = '자유게시판' if board_type == 'free' else '프로젝트게시판'
     is_logged_in = 'user_id' in session
-    
-    # ⭐ 로그인하지 않은 경우 로그인 페이지로 리다이렉트
-    if not is_logged_in:
-        flash('글을 작성하려면 로그인이 필요합니다.', 'error')
-        return redirect(url_for('login'))
-    
     return render_template('write.html', board_type=board_type, board_name=board_name, is_logged_in=is_logged_in)
 
 @app.route('/post/<int:post_id>')
@@ -442,31 +459,206 @@ def view_post(post_id):
     
     return render_template('view.html', post=post, comments=comments, is_author=is_author)
 
-@app.route('/post/<int:post_id>/comment', methods=['POST'])
-def add_comment(post_id):
-    # ⭐ 로그인하지 않은 사용자는 댓글 작성 불가
-    if 'user_id' not in session:
-        flash('로그인 후 댓글을 작성할 수 있습니다.', 'error')
+@app.route('/post/<int:post_id>/edit', methods=['POST'])
+def edit_post(post_id):
+    password = request.form['password']
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
+    cursor.execute('SELECT * FROM posts WHERE id = %s', (post_id,))
+    post = cursor.fetchone()
+    
+    if post is None:
+        cursor.close()
+        conn.close()
+        return "게시글을 찾을 수 없습니다.", 404
+    
+    post = dict(post)
+    
+    # 권한 확인
+    is_admin = password == ADMIN_PASSWORD
+    is_author = False
+    
+    if post['user_id'] and 'user_id' in session and post['user_id'] == session['user_id']:
+        is_author = True
+    elif post['password']:
+        is_author = check_password_hash(post['password'], password)
+    
+    if not (is_admin or is_author):
+        cursor.close()
+        conn.close()
+        flash('비밀번호가 일치하지 않습니다.', 'error')
         return redirect(url_for('view_post', post_id=post_id))
     
+    cursor.close()
+    conn.close()
+    
+    return render_template('edit.html', post=post)
+
+@app.route('/post/<int:post_id>/update', methods=['POST'])
+def update_post(post_id):
+    title = request.form['title']
+    content = request.form['content']
+    password = request.form['password']
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
+    cursor.execute('SELECT * FROM posts WHERE id = %s', (post_id,))
+    post = cursor.fetchone()
+    
+    if post is None:
+        cursor.close()
+        conn.close()
+        return "게시글을 찾을 수 없습니다.", 404
+    
+    post = dict(post)
+    
+    # 권한 확인
+    is_admin = password == ADMIN_PASSWORD
+    is_author = False
+    
+    if post['user_id'] and 'user_id' in session and post['user_id'] == session['user_id']:
+        is_author = True
+    elif post['password']:
+        is_author = check_password_hash(post['password'], password)
+    
+    if not (is_admin or is_author):
+        cursor.close()
+        conn.close()
+        flash('비밀번호가 일치하지 않습니다.', 'error')
+        return redirect(url_for('view_post', post_id=post_id))
+    
+    # 파일 수정 처리
+    file = request.files.get('file')
+    cloudinary_url = post['cloudinary_url']
+    cloudinary_public_id = post['cloudinary_public_id']
+    filename = post['filename']
+    
+    if request.form.get('delete_file') == 'on':
+        if cloudinary_public_id:
+            try:
+                cloudinary.uploader.destroy(cloudinary_public_id)
+            except:
+                pass
+        cloudinary_url = None
+        cloudinary_public_id = None
+        filename = None
+    
+    if file and file.filename:
+        if cloudinary_public_id:
+            try:
+                cloudinary.uploader.destroy(cloudinary_public_id)
+            except:
+                pass
+        
+        filename = secure_filename(file.filename)
+        try:
+            upload_result = cloudinary.uploader.upload(
+                file,
+                folder=f"nvidia8th_board/{post['board_type']}",
+                resource_type="auto"
+            )
+            cloudinary_url = upload_result['secure_url']
+            cloudinary_public_id = upload_result['public_id']
+        except Exception as e:
+            flash(f'파일 업로드 실패: {str(e)}', 'error')
+    
+    cursor.execute('''
+        UPDATE posts 
+        SET title = %s, content = %s, filename = %s, cloudinary_url = %s, cloudinary_public_id = %s
+        WHERE id = %s
+    ''', (title, content, filename, cloudinary_url, cloudinary_public_id, post_id))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
+    flash('게시글이 수정되었습니다.', 'success')
+    return redirect(url_for('view_post', post_id=post_id))
+
+@app.route('/post/<int:post_id>/delete', methods=['POST'])
+def delete_post(post_id):
+    password = request.form['password']
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
+    cursor.execute('SELECT * FROM posts WHERE id = %s', (post_id,))
+    post = cursor.fetchone()
+    
+    if post is None:
+        cursor.close()
+        conn.close()
+        return "게시글을 찾을 수 없습니다.", 404
+    
+    post = dict(post)
+    
+    # 권한 확인
+    is_admin = password == ADMIN_PASSWORD
+    is_author = False
+    
+    if post['user_id'] and 'user_id' in session and post['user_id'] == session['user_id']:
+        is_author = True
+    elif post['password']:
+        is_author = check_password_hash(post['password'], password)
+    
+    if not (is_admin or is_author):
+        cursor.close()
+        conn.close()
+        flash('비밀번호가 일치하지 않습니다.', 'error')
+        return redirect(url_for('view_post', post_id=post_id))
+    
+    # Cloudinary 파일 삭제
+    if post['cloudinary_public_id']:
+        try:
+            cloudinary.uploader.destroy(post['cloudinary_public_id'])
+        except:
+            pass
+    
+    cursor.execute('DELETE FROM comments WHERE post_id = %s', (post_id,))
+    cursor.execute('DELETE FROM posts WHERE id = %s', (post_id,))
+    
+    conn.commit()
+    board_type = post['board_type']
+    cursor.close()
+    conn.close()
+    
+    flash('게시글이 삭제되었습니다.', 'success')
+    return redirect(url_for('board', board_type=board_type))
+
+@app.route('/post/<int:post_id>/comment', methods=['POST'])
+def add_comment(post_id):
     content = request.form['content']
     parent_id = request.form.get('parent_id')
+    
+    if parent_id:
+        parent_id = int(parent_id)
+    else:
+        parent_id = None
     
     ip_address = get_client_ip()
     user_agent = request.headers.get('User-Agent', '')
     
-    # 로그인 사용자만 여기까지 도달
-    user_id = session['user_id']
-    author = session['username']
-    password_hash = None
+    # 로그인 여부에 따라 처리
+    if 'user_id' in session:
+        user_id = session['user_id']
+        author = session['username']
+        password_hash = None
+    else:
+        user_id = None
+        author = request.form['author']
+        password = request.form['password']
+        password_hash = generate_password_hash(password)
     
     conn = get_db_connection()
     cursor = conn.cursor()
     
     cursor.execute('''
-        INSERT INTO comments (post_id, author, password, content, parent_id, user_id, ip_address, user_agent)
+        INSERT INTO comments (post_id, parent_id, author, password, content, user_id, ip_address, user_agent)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    ''', (post_id, author, password_hash, content, parent_id, user_id, ip_address, user_agent))
+    ''', (post_id, parent_id, author, password_hash, content, user_id, ip_address, user_agent))
     
     conn.commit()
     cursor.close()
@@ -475,188 +667,9 @@ def add_comment(post_id):
     flash('댓글이 작성되었습니다.', 'success')
     return redirect(url_for('view_post', post_id=post_id))
 
-@app.route('/post/<int:post_id>/edit', methods=['GET', 'POST'])
-def edit_post(post_id):
-    conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-    
-    cursor.execute('SELECT * FROM posts WHERE id = %s', (post_id,))
-    post = cursor.fetchone()
-    
-    if post is None:
-        cursor.close()
-        conn.close()
-        return "게시글을 찾을 수 없습니다.", 404
-    
-    post = dict(post)
-    
-    if request.method == 'POST':
-        password = request.form.get('password', '')
-        is_admin = password == ADMIN_PASSWORD
-        
-        # 권한 확인
-        if 'user_id' in session:
-            if post['user_id'] != session['user_id'] and not is_admin:
-                flash('수정 권한이 없습니다.', 'error')
-                cursor.close()
-                conn.close()
-                return redirect(url_for('view_post', post_id=post_id))
-        else:
-            if not post['password'] or not check_password_hash(post['password'], password):
-                if not is_admin:
-                    flash('비밀번호가 일치하지 않습니다.', 'error')
-                    cursor.close()
-                    conn.close()
-                    return redirect(url_for('edit_post', post_id=post_id))
-        
-        title = request.form['title']
-        content = request.form['content']
-        
-        file = request.files.get('file')
-        
-        if file and file.filename:
-            if post['cloudinary_public_id']:
-                try:
-                    cloudinary.uploader.destroy(post['cloudinary_public_id'])
-                except:
-                    pass
-            
-            filename = secure_filename(file.filename)
-            try:
-                upload_result = cloudinary.uploader.upload(
-                    file,
-                    folder=f"nvidia8th_board/{post['board_type']}",
-                    resource_type="auto"
-                )
-                cloudinary_url = upload_result['secure_url']
-                cloudinary_public_id = upload_result['public_id']
-                
-                cursor.execute('''
-                    UPDATE posts 
-                    SET title = %s, content = %s, filename = %s, 
-                        cloudinary_url = %s, cloudinary_public_id = %s
-                    WHERE id = %s
-                ''', (title, content, filename, cloudinary_url, cloudinary_public_id, post_id))
-            except Exception as e:
-                flash(f'파일 업로드 실패: {str(e)}', 'error')
-                cursor.close()
-                conn.close()
-                return redirect(url_for('edit_post', post_id=post_id))
-        else:
-            cursor.execute('''
-                UPDATE posts 
-                SET title = %s, content = %s
-                WHERE id = %s
-            ''', (title, content, post_id))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        flash('게시글이 수정되었습니다.', 'success')
-        return redirect(url_for('view_post', post_id=post_id))
-    
-    cursor.close()
-    conn.close()
-    
-    is_author = False
-    if 'user_id' in session and post['user_id'] == session['user_id']:
-        is_author = True
-    
-    board_name = '자유게시판' if post['board_type'] == 'free' else '프로젝트게시판'
-    return render_template('edit.html', post=post, board_name=board_name, is_author=is_author)
-
-@app.route('/post/<int:post_id>/delete', methods=['POST'])
-def delete_post(post_id):
-    password = request.form.get('password', '')
-    is_admin = password == ADMIN_PASSWORD
-    
-    conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-    
-    cursor.execute('SELECT * FROM posts WHERE id = %s', (post_id,))
-    post = cursor.fetchone()
-    
-    if post is None:
-        cursor.close()
-        conn.close()
-        return "게시글을 찾을 수 없습니다.", 404
-    
-    post = dict(post)
-    
-    # 권한 확인
-    if 'user_id' in session:
-        if post['user_id'] != session['user_id'] and not is_admin:
-            flash('삭제 권한이 없습니다.', 'error')
-            cursor.close()
-            conn.close()
-            return redirect(url_for('view_post', post_id=post_id))
-    else:
-        if not post['password'] or not check_password_hash(post['password'], password):
-            if not is_admin:
-                flash('비밀번호가 일치하지 않습니다.', 'error')
-                cursor.close()
-                conn.close()
-                return redirect(url_for('view_post', post_id=post_id))
-    
-    # Cloudinary 파일 삭제
-    if post['cloudinary_public_id']:
-        try:
-            cloudinary.uploader.destroy(post['cloudinary_public_id'])
-        except:
-            pass
-    
-    cursor.execute('DELETE FROM posts WHERE id = %s', (post_id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    
-    flash('게시글이 삭제되었습니다.', 'success')
-    return redirect(url_for('board', board_type=post['board_type']))
-
-@app.route('/comment/<int:comment_id>/edit', methods=['POST'])
-def edit_comment(comment_id):
-    content = request.form['content']
-    password = request.form.get('password', '')
-    is_admin = password == ADMIN_PASSWORD
-    
-    conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-    
-    cursor.execute('SELECT * FROM comments WHERE id = %s', (comment_id,))
-    comment = cursor.fetchone()
-    
-    if comment is None:
-        cursor.close()
-        conn.close()
-        return jsonify({'success': False, 'message': '댓글을 찾을 수 없습니다.'})
-    
-    comment = dict(comment)
-    
-    # 권한 확인
-    if 'user_id' in session:
-        if comment['user_id'] != session['user_id'] and not is_admin:
-            cursor.close()
-            conn.close()
-            return jsonify({'success': False, 'message': '수정 권한이 없습니다.'})
-    else:
-        if not comment['password'] or not check_password_hash(comment['password'], password):
-            if not is_admin:
-                cursor.close()
-                conn.close()
-                return jsonify({'success': False, 'message': '비밀번호가 일치하지 않습니다.'})
-    
-    cursor.execute('UPDATE comments SET content = %s WHERE id = %s', (content, comment_id))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    
-    return jsonify({'success': True, 'message': '댓글이 수정되었습니다.'})
-
 @app.route('/comment/<int:comment_id>/delete', methods=['POST'])
 def delete_comment(comment_id):
-    password = request.form.get('password', '')
-    is_admin = password == ADMIN_PASSWORD
+    password = request.form['password']
     
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -667,91 +680,110 @@ def delete_comment(comment_id):
     if comment is None:
         cursor.close()
         conn.close()
-        return jsonify({'success': False, 'message': '댓글을 찾을 수 없습니다.'})
+        flash('댓글을 찾을 수 없습니다.', 'error')
+        return redirect(url_for('index'))
     
     comment = dict(comment)
-    post_id = comment['post_id']
     
     # 권한 확인
-    if 'user_id' in session:
-        if comment['user_id'] != session['user_id'] and not is_admin:
-            cursor.close()
-            conn.close()
-            return jsonify({'success': False, 'message': '삭제 권한이 없습니다.'})
-    else:
-        if not comment['password'] or not check_password_hash(comment['password'], password):
-            if not is_admin:
-                cursor.close()
-                conn.close()
-                return jsonify({'success': False, 'message': '비밀번호가 일치하지 않습니다.'})
+    is_admin = password == ADMIN_PASSWORD
+    is_author = False
+    
+    if comment['user_id'] and 'user_id' in session and comment['user_id'] == session['user_id']:
+        is_author = True
+    elif comment['password']:
+        is_author = check_password_hash(comment['password'], password)
+    
+    if not (is_admin or is_author):
+        cursor.close()
+        conn.close()
+        flash('비밀번호가 일치하지 않습니다.', 'error')
+        return redirect(url_for('view_post', post_id=comment['post_id']))
+    
+    post_id = comment['post_id']
     
     cursor.execute('DELETE FROM comments WHERE id = %s', (comment_id,))
+    
     conn.commit()
     cursor.close()
     conn.close()
     
-    return jsonify({'success': True, 'message': '댓글이 삭제되었습니다.', 'redirect': url_for('view_post', post_id=post_id)})
+    flash('댓글이 삭제되었습니다.', 'success')
+    return redirect(url_for('view_post', post_id=post_id))
 
-@app.route('/admin/delete-user', methods=['POST'])
-def admin_delete_user():
-    admin_password = request.form.get('admin_password', '')
-    user_id = request.form.get('user_id')
+# ==================== 관리자 ====================
+
+@app.route('/admin/backup')
+def admin_backup():
+    admin_password = request.args.get('password')
     
     if admin_password != ADMIN_PASSWORD:
-        flash('관리자 비밀번호가 일치하지 않습니다.', 'error')
-        return redirect(url_for('user_profile', user_id=user_id))
-    
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # 사용자 삭제 (CASCADE로 관련 게시글/댓글도 자동 삭제)
-    cursor.execute('DELETE FROM users WHERE id = %s', (user_id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    
-    # 삭제된 사용자가 로그인 중이면 로그아웃
-    if session.get('user_id') == int(user_id):
-        session.clear()
-    
-    flash('사용자가 삭제되었습니다.', 'success')
-    return redirect(url_for('index'))
-
-@app.route('/admin/delete-anonymous', methods=['POST'])
-def admin_delete_anonymous():
-    admin_password = request.form.get('admin_password', '')
-    post_id = request.form.get('post_id')
-    
-    if admin_password != ADMIN_PASSWORD:
-        return jsonify({'success': False, 'message': '관리자 비밀번호가 일치하지 않습니다.'})
+        return "Unauthorized", 401
     
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     
-    cursor.execute('SELECT * FROM posts WHERE id = %s', (post_id,))
-    post = cursor.fetchone()
+    cursor.execute('SELECT * FROM posts ORDER BY id')
+    posts = [dict(row) for row in cursor.fetchall()]
     
-    if not post:
-        cursor.close()
-        conn.close()
-        return jsonify({'success': False, 'message': '게시글을 찾을 수 없습니다.'})
+    for post in posts:
+        if post.get('created_at') and hasattr(post['created_at'], 'isoformat'):
+            post['created_at'] = post['created_at'].isoformat()
     
-    post = dict(post)
+    cursor.execute('SELECT * FROM comments ORDER BY id')
+    comments = [dict(row) for row in cursor.fetchall()]
     
-    # Cloudinary 파일 삭제
-    if post['cloudinary_public_id']:
-        try:
-            cloudinary.uploader.destroy(post['cloudinary_public_id'])
-        except:
-            pass
+    for comment in comments:
+        if comment.get('created_at') and hasattr(comment['created_at'], 'isoformat'):
+            comment['created_at'] = comment['created_at'].isoformat()
     
-    cursor.execute('DELETE FROM posts WHERE id = %s', (post_id,))
-    conn.commit()
     cursor.close()
     conn.close()
     
-    return jsonify({'success': True, 'message': '게시글이 삭제되었습니다.', 'redirect': url_for('board', board_type=post['board_type'])})
+    backup_data = {
+        'backup_date': datetime.now().isoformat(),
+        'database_type': 'PostgreSQL',
+        'posts_count': len(posts),
+        'comments_count': len(comments),
+        'posts': posts,
+        'comments': comments
+    }
+    
+    return jsonify(backup_data)
+
+@app.route('/admin/user-activity')
+def admin_user_activity():
+    password = request.args.get('password')
+    if password != ADMIN_PASSWORD:
+        return "Unauthorized", 401
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
+    cursor.execute('''
+        SELECT 
+            u.id, u.username, u.email, u.created_at,
+            COUNT(DISTINCT p.id) as post_count,
+            COUNT(DISTINCT c.id) as comment_count
+        FROM users u
+        LEFT JOIN posts p ON u.id = p.user_id
+        LEFT JOIN comments c ON u.id = c.user_id
+        GROUP BY u.id, u.username, u.email, u.created_at
+        ORDER BY u.created_at DESC
+    ''')
+    users = [dict(row) for row in cursor.fetchall()]
+    
+    cursor.close()
+    conn.close()
+    
+    html = '<h1>사용자 활동 현황</h1><table border="1"><tr><th>ID</th><th>아이디</th><th>이메일</th><th>게시글</th><th>댓글</th><th>가입일</th></tr>'
+    for user in users:
+        html += f'<tr><td>{user["id"]}</td><td><a href="/user/{user["id"]}">{user["username"]}</a></td><td>{user["email"]}</td><td>{user["post_count"]}</td><td>{user["comment_count"]}</td><td>{user["created_at"]}</td></tr>'
+    html += '</table>'
+    
+    return html
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
