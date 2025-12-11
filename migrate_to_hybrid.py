@@ -13,12 +13,11 @@ import sys
 DATABASE_URL = os.environ.get('DATABASE_URL')
 USE_POSTGRES = DATABASE_URL is not None
 
-if USE_POSTGRES:
-    import psycopg2
-    if DATABASE_URL.startswith("postgres://"):
-        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-else:
-    import sqlite3
+
+import psycopg2
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 
 def migrate():
     print("=" * 60)

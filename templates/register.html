@@ -3,78 +3,378 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>회원가입</title>
+    <title>회원가입 - NVIDIA 8th 게시판</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; }
-        nav { background: #2c3e50; color: white; padding: 1rem 2rem; }
-        nav ul { list-style: none; display: flex; gap: 2rem; }
-        nav a { color: white; text-decoration: none; }
-        .container { max-width: 500px; margin: 3rem auto; padding: 0 2rem; }
-        .register-form { background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { color: #2c3e50; margin-bottom: 2rem; text-align: center; }
-        .form-group { margin-bottom: 1.5rem; }
-        label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50; }
-        input { width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem; }
-        input:focus { outline: none; border-color: #3498db; }
-        .btn { width: 100%; padding: 1rem; background: #3498db; color: white; border: none; border-radius: 5px; font-size: 1rem; cursor: pointer; font-weight: 600; }
-        .btn:hover { background: #2980b9; }
-        .link-group { margin-top: 1.5rem; text-align: center; color: #666; }
-        .link-group a { color: #3498db; text-decoration: none; }
-        .link-group a:hover { text-decoration: underline; }
-        .flash { padding: 1rem; margin-bottom: 1rem; border-radius: 5px; }
-        .flash.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .flash.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .help-text { font-size: 0.85rem; color: #666; margin-top: 0.3rem; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 450px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .help-text.error {
+            color: #e74c3c;
+        }
+
+        .help-text.success {
+            color: #27ae60;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .links {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+
+        .links a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .links a:hover {
+            text-decoration: underline;
+        }
+
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+
+        .flash {
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .flash.error {
+            background-color: #fee;
+            color: #c33;
+            border-left: 4px solid #e74c3c;
+        }
+
+        .flash.success {
+            background-color: #efe;
+            color: #3c3;
+            border-left: 4px solid #27ae60;
+        }
+
+        .requirements {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        .requirements h4 {
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .requirements ul {
+            list-style: none;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .requirements li {
+            margin-bottom: 4px;
+            padding-left: 18px;
+            position: relative;
+        }
+
+        .requirements li:before {
+            content: "•";
+            position: absolute;
+            left: 5px;
+            color: #667eea;
+        }
     </style>
 </head>
 <body>
-    <nav>
-        <ul>
-            <li><a href="/">🏠 홈</a></li>
-            <li><a href="/board/free">💬 자유게시판</a></li>
-            <li><a href="/board/project">📁 프로젝트게시판</a></li>
-        </ul>
-    </nav>
-
     <div class="container">
-        <div class="register-form">
-            <h1>회원가입</h1>
-            
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
+        <h1>🚀 회원가입</h1>
+        <p class="subtitle">NVIDIA 8th 게시판에 가입하세요</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
                     {% for category, message in messages %}
-                    <div class="flash {{ category }}">{{ message }}</div>
+                        <div class="flash {{ category }}">{{ message }}</div>
                     {% endfor %}
-                {% endif %}
-            {% endwith %}
-            
-            <form method="POST">
-                <div class="form-group">
-                    <label>아이디</label>
-                    <input type="text" name="username" required minlength="3" maxlength="20" pattern="[a-zA-Z0-9_]+" placeholder="영문, 숫자, 밑줄만 사용 (3-20자)">
-                    <div class="help-text">영문, 숫자, 밑줄(_)만 사용 가능</div>
                 </div>
-                
-                <div class="form-group">
-                    <label>이메일</label>
-                    <input type="email" name="email" required placeholder="example@email.com">
-                    <div class="help-text">인증 이메일이 발송됩니다</div>
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" id="registerForm">
+            <div class="form-group">
+                <label for="username">아이디 *</label>
+                <input type="text" id="username" name="username" required>
+                <div class="help-text" id="usernameHelp">
+                    한글, 영문, 숫자, 밑줄(_)만 사용 가능 (3-50자)
                 </div>
-                
-                <div class="form-group">
-                    <label>비밀번호</label>
-                    <input type="password" name="password" required minlength="8" placeholder="8자 이상">
-                    <div class="help-text">8자 이상 입력해주세요</div>
-                </div>
-                
-                <button type="submit" class="btn">가입하기</button>
-            </form>
-            
-            <div class="link-group">
-                이미 계정이 있으신가요? <a href="/login">로그인</a>
             </div>
+
+            <div class="form-group">
+                <label for="email">이메일 주소 *</label>
+                <input type="email" id="email" name="email" required>
+                <div class="help-text">
+                    인증 이메일이 발송됩니다
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="password">비밀번호 *</label>
+                <input type="password" id="password" name="password" required>
+                <div class="help-text" id="passwordHelp">
+                    8자 이상 입력해주세요
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="password2">비밀번호 확인 *</label>
+                <input type="password" id="password2" name="password2" required>
+                <div class="help-text" id="password2Help"></div>
+            </div>
+
+            <div class="requirements">
+                <h4>📋 가입 요구사항</h4>
+                <ul>
+                    <li>아이디: 한글, 영문, 숫자, 밑줄 사용 가능</li>
+                    <li>비밀번호: 최소 8자 이상</li>
+                    <li>유효한 이메일 주소 필요</li>
+                    <li>이메일 인증 필수</li>
+                </ul>
+            </div>
+
+            <button type="submit" id="submitBtn">회원가입</button>
+        </form>
+
+        <div class="links">
+            이미 계정이 있으신가요? <a href="{{ url_for('login') }}">로그인</a>
+            <br><br>
+            <a href="{{ url_for('index') }}">← 메인으로 돌아가기</a>
         </div>
     </div>
+
+    <script>
+        const form = document.getElementById('registerForm');
+        const usernameInput = document.getElementById('username');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const password2Input = document.getElementById('password2');
+        const submitBtn = document.getElementById('submitBtn');
+
+        const usernameHelp = document.getElementById('usernameHelp');
+        const passwordHelp = document.getElementById('passwordHelp');
+        const password2Help = document.getElementById('password2Help');
+
+        // 아이디 유효성 검사 (한글, 영문, 숫자, 밑줄 허용)
+        usernameInput.addEventListener('input', function() {
+            const value = this.value;
+            const regex = /^[가-힣a-zA-Z0-9_]{3,50}$/;  // 한글 허용!
+            
+            if (value.length === 0) {
+                usernameHelp.textContent = '한글, 영문, 숫자, 밑줄(_)만 사용 가능 (3-50자)';
+                usernameHelp.className = 'help-text';
+            } else if (value.length < 3) {
+                usernameHelp.textContent = '❌ 너무 짧습니다 (최소 3자)';
+                usernameHelp.className = 'help-text error';
+            } else if (value.length > 50) {
+                usernameHelp.textContent = '❌ 너무 깁니다 (최대 50자)';
+                usernameHelp.className = 'help-text error';
+            } else if (!regex.test(value)) {
+                usernameHelp.textContent = '❌ 한글, 영문, 숫자, 밑줄(_)만 사용 가능합니다';
+                usernameHelp.className = 'help-text error';
+            } else {
+                usernameHelp.textContent = '✓ 사용 가능한 아이디입니다';
+                usernameHelp.className = 'help-text success';
+            }
+            
+            checkFormValid();
+        });
+
+        // 비밀번호 유효성 검사
+        passwordInput.addEventListener('input', function() {
+            const value = this.value;
+            
+            if (value.length === 0) {
+                passwordHelp.textContent = '8자 이상 입력해주세요';
+                passwordHelp.className = 'help-text';
+            } else if (value.length < 8) {
+                passwordHelp.textContent = '❌ 너무 짧습니다 (최소 8자)';
+                passwordHelp.className = 'help-text error';
+            } else {
+                passwordHelp.textContent = '✓ 사용 가능한 비밀번호입니다';
+                passwordHelp.className = 'help-text success';
+            }
+            
+            // 비밀번호 확인도 같이 체크
+            if (password2Input.value.length > 0) {
+                password2Input.dispatchEvent(new Event('input'));
+            }
+            
+            checkFormValid();
+        });
+
+        // 비밀번호 확인
+        password2Input.addEventListener('input', function() {
+            const value = this.value;
+            const password = passwordInput.value;
+            
+            if (value.length === 0) {
+                password2Help.textContent = '';
+                password2Help.className = 'help-text';
+            } else if (value !== password) {
+                password2Help.textContent = '❌ 비밀번호가 일치하지 않습니다';
+                password2Help.className = 'help-text error';
+            } else {
+                password2Help.textContent = '✓ 비밀번호가 일치합니다';
+                password2Help.className = 'help-text success';
+            }
+            
+            checkFormValid();
+        });
+
+        // 폼 유효성 전체 체크
+        function checkFormValid() {
+            const usernameValid = /^[가-힣a-zA-Z0-9_]{3,50}$/.test(usernameInput.value);
+            const emailValid = emailInput.value.length > 0 && emailInput.validity.valid;
+            const passwordValid = passwordInput.value.length >= 8;
+            const password2Valid = password2Input.value === passwordInput.value && password2Input.value.length > 0;
+            
+            submitBtn.disabled = !(usernameValid && emailValid && passwordValid && password2Valid);
+        }
+
+        // 폼 제출 전 최종 확인
+        form.addEventListener('submit', function(e) {
+            const username = usernameInput.value;
+            const regex = /^[가-힣a-zA-Z0-9_]{3,50}$/;
+            
+            if (!regex.test(username)) {
+                e.preventDefault();
+                alert('아이디는 한글, 영문, 숫자, 밑줄(_)만 사용 가능합니다 (3-50자)');
+                usernameInput.focus();
+                return false;
+            }
+            
+            if (passwordInput.value.length < 8) {
+                e.preventDefault();
+                alert('비밀번호는 8자 이상이어야 합니다.');
+                passwordInput.focus();
+                return false;
+            }
+            
+            if (passwordInput.value !== password2Input.value) {
+                e.preventDefault();
+                alert('비밀번호가 일치하지 않습니다.');
+                password2Input.focus();
+                return false;
+            }
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = '가입 중...';
+        });
+
+        // 이메일 입력 시에도 체크
+        emailInput.addEventListener('input', checkFormValid);
+    </script>
 </body>
 </html>

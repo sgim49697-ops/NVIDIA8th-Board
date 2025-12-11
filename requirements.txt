@@ -4,4 +4,4 @@ psycopg2-binary==2.9.9
 cloudinary==1.41.0
 Flask-Mail==0.9.1
 itsdangerous==2.1.2
-gunicorn
+gunicorn==21.2.0

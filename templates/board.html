@@ -101,9 +101,10 @@
             {% if posts %}
                 {% for post in posts %}
                 <div class="post-item" onclick="location.href='/post/{{ post['id'] }}'">
-                    <div class="post-thumbnail {% if not post['cloudinary_url'] %}placeholder{% endif %}">
-                        {% if post['cloudinary_url'] %}
-                            <img src="{{ post['cloudinary_url'] }}" alt="썸네일">
+                    <!-- ⭐ 썸네일 우선순위: post['thumbnail'] 사용 (본문 이미지 우선, 없으면 첨부 파일) -->
+                    <div class="post-thumbnail {% if not post['thumbnail'] %}placeholder{% endif %}">
+                        {% if post['thumbnail'] %}
+                            <img src="{{ post['thumbnail'] }}" alt="썸네일">
                         {% else %}
                             📄
                         {% endif %}
