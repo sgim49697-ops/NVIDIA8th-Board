@@ -41,6 +41,7 @@ app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_TIMEOUT'] = 50
 
 if not app.config['MAIL_USERNAME'] or not app.config['MAIL_PASSWORD']:
     raise ValueError("❌ MAIL_USERNAME 또는 MAIL_PASSWORD 환경변수가 설정되지 않았습니다!")
@@ -183,7 +184,12 @@ def register():
             confirm_url = url_for('confirm_email', token=token, _external=True)
             msg = Message('이메일 인증', recipients=[email])
             msg.body = f'다음 링크를 클릭하여 이메일을 인증해주세요:\n{confirm_url}\n\n이 링크는 1시간 동안 유효합니다.'
-            mail.send(msg)
+            try:
+                mail.send(msg)
+                flash('인증 이메일이 발송되었습니다.', 'success')
+            except Exception as mail_error:
+                print(f"❌ 이메일 발송 실패: {mail_error}")
+                flash('회원가입은 완료되었으나 이메일 발송 실패.', 'warning')
             
             flash('회원가입이 완료되었습니다! 이메일을 확인하여 인증을 완료해주세요.', 'success')
             return redirect(url_for('login'))
