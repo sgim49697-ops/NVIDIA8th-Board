@@ -11,22 +11,22 @@
         nav { background: #2c3e50; color: white; padding: 1rem 2rem; }
         nav ul { list-style: none; display: flex; gap: 2rem; }
         nav a { color: white; text-decoration: none; }
-        .container { max-width: 800px; margin: 2rem auto; padding: 0 2rem; }
+        .container { max-width: 900px; margin: 2rem auto; padding: 0 2rem; }
         .edit-form { background: white; padding: 2rem; border-radius: 10px; }
+        h1 { color: #2c3e50; margin-bottom: 2rem; }
         .form-group { margin-bottom: 1.5rem; }
-        label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
-        input[type="text"], input[type="password"] { width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 5px; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+        input[type="text"] { width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 5px; }
         #editor { height: 300px; }
-        .btn { padding: 0.8rem 2rem; border: none; border-radius: 5px; cursor: pointer; color: white; }
-        .btn-primary { background: #3498db; }
-        .btn-secondary { background: #95a5a6; }
-        
-        /* 파일 수정 섹션 */
-        .file-section { background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
-        .current-file { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
-        .current-file img { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; }
-        .delete-file-checkbox { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
-        .delete-file-checkbox input[type="checkbox"] { width: auto; }
+        .btn { padding: 0.8rem 2rem; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; }
+        .btn-primary { background: #3498db; color: white; }
+        .btn-secondary { background: #95a5a6; color: white; margin-left: 1rem; }
+        .file-current { background: #e8f4f8; padding: 1rem; border-radius: 5px; margin-bottom: 1rem; }
+        .file-current a { color: #3498db; text-decoration: none; }
+        .checkbox-group { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+        .checkbox-group input[type="checkbox"] { width: auto; }
+        .user-info { background: #e8f4f8; padding: 1rem; border-radius: 5px; margin-bottom: 1.5rem; color: #2c3e50; }
+        .user-info strong { color: #3498db; }
     </style>
 </head>
 <body>
@@ -35,68 +35,72 @@
             <li><a href="/">🏠 홈</a></li>
             <li><a href="/board/free">💬 자유게시판</a></li>
             <li><a href="/board/project">📁 프로젝트게시판</a></li>
+            {% if session.get('user_id') %}
+            <li><a href="/logout">🚪 로그아웃</a></li>
+            {% else %}
+            <li><a href="/login">🔑 로그인</a></li>
+            {% endif %}
         </ul>
     </nav>
 
     <div class="container">
         <div class="edit-form">
             <h1>게시글 수정</h1>
+            
+            {% if post['user_id'] and session.get('user_id') == post['user_id'] %}
+            <div class="user-info">
+                ✓ <strong>{{ session['username'] }}</strong>님의 게시글입니다. (비밀번호 입력 불필요)
+            </div>
+            {% endif %}
+            
             <form method="POST" action="/post/{{ post['id'] }}/update" enctype="multipart/form-data">
+                {% if post['user_id'] and session.get('user_id') == post['user_id'] %}
+                <input type="hidden" name="password" value="logged_in">
+                {% else %}
+                <div class="form-group">
+                    <label>비밀번호 확인</label>
+                    <input type="password" name="password" required placeholder="수정 권한 확인을 위해 비밀번호를 입력하세요">
+                </div>
+                {% endif %}
+                
                 <div class="form-group">
                     <label>제목</label>
                     <input type="text" name="title" value="{{ post['title'] }}" required>
                 </div>
-
+                
                 <div class="form-group">
                     <label>내용</label>
                     <div id="editor"></div>
                     <input type="hidden" name="content" id="content">
                 </div>
-
-                <!-- 파일 수정 섹션 -->
+                
                 <div class="form-group">
                     <label>첨부파일</label>
-                    
                     {% if post['cloudinary_url'] %}
-                    <div class="file-section">
-                        <strong>현재 파일:</strong>
-                        <div class="current-file">
-                            {% if post['cloudinary_url'].endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')) %}
-                                <img src="{{ post['cloudinary_url'] }}" alt="현재 파일">
-                            {% else %}
-                                <span>📎</span>
-                            {% endif %}
-                            <div>
-                                <div><a href="{{ post['cloudinary_url'] }}" target="_blank">{{ post['filename'] }}</a></div>
-                                <div class="delete-file-checkbox">
-                                    <input type="checkbox" name="delete_file" id="delete_file">
-                                    <label for="delete_file" style="margin: 0;">기존 파일 삭제</label>
-                                </div>
-                            </div>
+                    <div class="file-current">
+                        <strong>현재 파일:</strong> 
+                        <a href="{{ post['cloudinary_url'] }}" target="_blank">{{ post['filename'] }}</a>
+                        <div class="checkbox-group">
+                            <input type="checkbox" name="delete_file" id="delete_file">
+                            <label for="delete_file" style="margin-bottom: 0;">파일 삭제</label>
                         </div>
                     </div>
                     {% endif %}
-                    
-                    <label style="margin-top: 1rem;">새 파일 업로드 (기존 파일 대체)</label>
                     <input type="file" name="file">
-                    <small style="color: #666;">※ 새 파일을 선택하면 기존 파일이 교체됩니다.</small>
+                    <small style="color: #666; display: block; margin-top: 0.5rem;">
+                        새 파일을 선택하면 기존 파일이 교체됩니다.
+                    </small>
                 </div>
-
-                <div class="form-group">
-                    <label>비밀번호 확인</label>
-                    <input type="password" name="password" required>
-                </div>
-
-                <div class="button-group" style="display: flex; gap: 1rem; margin-top: 2rem;">
+                
+                <div style="margin-top: 2rem;">
                     <button type="submit" class="btn btn-primary">수정 완료</button>
-                    <a href="/post/{{ post['id'] }}" class="btn btn-secondary" style="text-decoration: none; display: inline-block; text-align: center;">취소</a>
+                    <a href="/post/{{ post['id'] }}" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">취소</a>
                 </div>
             </form>
         </div>
     </div>
 
     <script>
-        // Quill 에디터 초기화
         var quill = new Quill('#editor', {
             theme: 'snow',
             modules: {
@@ -115,7 +119,6 @@
         // 기존 내용 로드
         quill.root.innerHTML = {{ post['content']|tojson }};
 
-        // 폼 제출 시 내용 저장
         document.querySelector('form').onsubmit = function() {
             document.getElementById('content').value = quill.root.innerHTML;
         };

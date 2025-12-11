@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ user['username'] }}님의 프로필</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; }
+        nav { background: #2c3e50; color: white; padding: 1rem 2rem; }
+        nav ul { list-style: none; display: flex; gap: 2rem; }
+        nav a { color: white; text-decoration: none; }
+        .container { max-width: 1000px; margin: 2rem auto; padding: 0 2rem; }
+        .profile-header { background: white; padding: 2rem; border-radius: 10px; margin-bottom: 2rem; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .profile-header h1 { color: #2c3e50; margin-bottom: 0.5rem; }
+        .profile-header .date { color: #666; }
+        .section { background: white; padding: 2rem; border-radius: 10px; margin-bottom: 2rem; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .section h2 { color: #2c3e50; margin-bottom: 1.5rem; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
+        .item { padding: 1rem; border-bottom: 1px solid #ecf0f1; }
+        .item:last-child { border-bottom: none; }
+        .item:hover { background: #f8f9fa; }
+        .item-title { font-weight: 600; color: #2c3e50; margin-bottom: 0.5rem; }
+        .item-title a { color: #2c3e50; text-decoration: none; }
+        .item-title a:hover { color: #3498db; }
+        .item-meta { color: #666; font-size: 0.9rem; }
+        .badge { display: inline-block; padding: 0.3rem 0.6rem; background: #3498db; color: white; border-radius: 3px; font-size: 0.8rem; margin-left: 0.5rem; }
+        .empty { text-align: center; padding: 2rem; color: #999; }
+    </style>
+</head>
+<body>
+    <nav>
+        <ul>
+            <li><a href="/">🏠 홈</a></li>
+            <li><a href="/board/free">💬 자유게시판</a></li>
+            <li><a href="/board/project">📁 프로젝트게시판</a></li>
+            {% if session.get('user_id') %}
+            <li><a href="/logout">🚪 로그아웃</a></li>
+            {% else %}
+            <li><a href="/login">🔑 로그인</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+
+    <div class="container">
+        <div class="profile-header">
+            <h1>👤 {{ user['username'] }} <span class="badge">✓ 인증됨</span></h1>
+            <p class="date">가입일: {{ user['created_at'].strftime('%Y-%m-%d') if user['created_at'].__class__.__name__ == 'datetime' else user['created_at'][:10] }}</p>
+        </div>
+
+        <div class="section">
+            <h2>📝 작성한 글 ({{ posts|length }}개)</h2>
+            {% if posts %}
+                {% for post in posts %}
+                <div class="item">
+                    <div class="item-title">
+                        <a href="/post/{{ post['id'] }}">{{ post['title'] }}</a>
+                        <span style="color: #999; font-size: 0.9rem;">[{{ '자유게시판' if post['board_type'] == 'free' else '프로젝트게시판' }}]</span>
+                    </div>
+                    <div class="item-meta">
+                        📅 {{ post['created_at'].strftime('%Y-%m-%d %H:%M') if post['created_at'].__class__.__name__ == 'datetime' else post['created_at'][:16] }}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty">작성한 글이 없습니다.</div>
+            {% endif %}
+        </div>
+
+        <div class="section">
+            <h2>💬 작성한 댓글 ({{ comments|length }}개)</h2>
+            {% if comments %}
+                {% for comment in comments %}
+                <div class="item">
+                    <div class="item-title">
+                        <a href="/post/{{ comment['post_id'] }}">{{ comment['post_title'] }}</a>
+                    </div>
+                    <div style="color: #666; margin: 0.5rem 0;">{{ comment['content'] }}</div>
+                    <div class="item-meta">
+                        📅 {{ comment['created_at'].strftime('%Y-%m-%d %H:%M') if comment['created_at'].__class__.__name__ == 'datetime' else comment['created_at'][:16] }}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty">작성한 댓글이 없습니다.</div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

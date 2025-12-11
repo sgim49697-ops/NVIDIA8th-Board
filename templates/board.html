@@ -2,22 +2,17 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ board_name }}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; }
         nav { background: #2c3e50; color: white; padding: 1rem 2rem; }
         nav ul { list-style: none; display: flex; gap: 2rem; }
-        nav a { color: white; text-decoration: none; font-weight: 500; transition: color 0.3s; }
-        nav a:hover { color: #3498db; }
+        nav a { color: white; text-decoration: none; }
         .container { max-width: 1000px; margin: 2rem auto; padding: 0 2rem; }
-        .board-header { background: white; padding: 2rem; border-radius: 10px; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .btn { padding: 0.8rem 1.5rem; background: #3498db; color: white; text-decoration: none; border-radius: 5px; transition: background 0.3s; }
-        .btn:hover { background: #2980b9; }
-        .post-list { background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        
-        /* 썸네일 기능 */
+        .board-header { background: white; padding: 2rem; border-radius: 10px; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .btn { padding: 0.8rem 1.5rem; background: #3498db; color: white; text-decoration: none; border-radius: 5px; }
+        .post-list { background: white; border-radius: 10px; overflow: hidden; }
         .post-item {
             padding: 1.5rem;
             border-bottom: 1px solid #ecf0f1;
@@ -50,35 +45,50 @@
         }
         .post-content-wrapper { flex: 1; min-width: 0; }
         .post-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .verified-badge { 
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            background: #3498db;
+            color: white;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            margin-left: 0.5rem;
+            vertical-align: middle;
+        }
         .post-meta { color: #7f8c8d; font-size: 0.9rem; }
-        .post-meta span { margin-right: 1rem; }
+        .post-meta a { color: #3498db; text-decoration: none; }
+        .post-meta a:hover { text-decoration: underline; }
         .empty-message { text-align: center; padding: 3rem; color: #7f8c8d; }
-        .flash-messages { position: fixed; top: 20px; right: 20px; z-index: 1000; }
-        .flash { padding: 1rem 1.5rem; margin-bottom: 0.5rem; border-radius: 5px; color: white; }
-        .flash.success { background: #27ae60; }
-        .flash.error { background: #e74c3c; }
+        .flash { padding: 1rem; margin-bottom: 1rem; border-radius: 5px; }
+        .flash.success { background: #d4edda; color: #155724; }
+        .flash.error { background: #f8d7da; color: #721c24; }
     </style>
 </head>
 <body>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div class="flash-messages">
-            {% for category, message in messages %}
-            <div class="flash {{ category }}">{{ message }}</div>
-            {% endfor %}
-        </div>
-        {% endif %}
-    {% endwith %}
-
     <nav>
         <ul>
             <li><a href="/">🏠 홈</a></li>
             <li><a href="/board/free">💬 자유게시판</a></li>
             <li><a href="/board/project">📁 프로젝트게시판</a></li>
+            {% if session.get('user_id') %}
+            <li><a href="/user/{{ session['user_id'] }}">👤 {{ session['username'] }}</a></li>
+            <li><a href="/logout">🚪 로그아웃</a></li>
+            {% else %}
+            <li><a href="/login">🔑 로그인</a></li>
+            <li><a href="/register">✍️ 회원가입</a></li>
+            {% endif %}
         </ul>
     </nav>
 
     <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
         <div class="board-header">
             <div>
                 <h1>{{ board_name }}</h1>
@@ -91,7 +101,6 @@
             {% if posts %}
                 {% for post in posts %}
                 <div class="post-item" onclick="location.href='/post/{{ post['id'] }}'">
-                    <!-- 썸네일 -->
                     <div class="post-thumbnail {% if not post['cloudinary_url'] %}placeholder{% endif %}">
                         {% if post['cloudinary_url'] %}
                             <img src="{{ post['cloudinary_url'] }}" alt="썸네일">
@@ -103,11 +112,22 @@
                     <div class="post-content-wrapper">
                         <div class="post-title">
                             {{ post['title'] }}
-                            {% if post['filename'] %}📎{% endif %}
+                            {% if post['user_id'] %}
+                            <span class="verified-badge">✓ 인증됨</span>
+                            {% endif %}
+                            {% if post['filename'] %}
+                            <span style="color: #3498db;">📎</span>
+                            {% endif %}
                         </div>
                         <div class="post-meta">
-                            <span>👤 {{ post['author'] }}</span>
-                            <span>📅 {{ post['created_at'].strftime('%Y-%m-%d %H:%M') if post['created_at'].__class__.__name__ == 'datetime' else post['created_at'][:16] }}</span>
+                            <span>👤 
+                                {% if post['user_id'] %}
+                                    <a href="/user/{{ post['user_id'] }}" onclick="event.stopPropagation()">{{ post['author'] }}</a>
+                                {% else %}
+                                    {{ post['author'] }}
+                                {% endif %}
+                            </span>
+                            <span style="margin-left: 1rem;">📅 {{ post['created_at'].strftime('%Y-%m-%d %H:%M') if post['created_at'].__class__.__name__ == 'datetime' else post['created_at'][:16] }}</span>
                         </div>
                     </div>
                 </div>
@@ -115,16 +135,10 @@
             {% else %}
                 <div class="empty-message">
                     <p>아직 게시글이 없습니다.</p>
-                    <a href="/write/{{ board_type }}" class="btn">첫 게시글 작성하기</a>
+                    <a href="/write/{{ board_type }}" class="btn" style="margin-top: 1rem; display: inline-block;">첫 게시글 작성하기</a>
                 </div>
             {% endif %}
         </div>
     </div>
-
-    <script>
-        setTimeout(() => {
-            document.querySelectorAll('.flash').forEach(f => f.remove());
-        }, 3000);
-    </script>
 </body>
 </html>
