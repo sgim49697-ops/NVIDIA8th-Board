@@ -438,21 +438,21 @@ def view_post(post_id):
 
 @app.route('/post/<int:post_id>/comment', methods=['POST'])
 def add_comment(post_id):
+    # ⭐ 로그인하지 않은 사용자는 댓글 작성 불가
+    if 'user_id' not in session:
+        flash('로그인 후 댓글을 작성할 수 있습니다.', 'error')
+        return redirect(url_for('view_post', post_id=post_id))
+    
     content = request.form['content']
     parent_id = request.form.get('parent_id')
     
     ip_address = get_client_ip()
     user_agent = request.headers.get('User-Agent', '')
     
-    if 'user_id' in session:
-        user_id = session['user_id']
-        author = session['username']
-        password_hash = None
-    else:
-        user_id = None
-        author = request.form['author']
-        password = request.form['password']
-        password_hash = generate_password_hash(password)
+    # 로그인 사용자만 여기까지 도달
+    user_id = session['user_id']
+    author = session['username']
+    password_hash = None
     
     conn = get_db_connection()
     cursor = conn.cursor()

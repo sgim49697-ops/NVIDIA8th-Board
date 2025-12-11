@@ -48,9 +48,16 @@
         .form-group input, .form-group textarea { width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; }
         .form-group textarea { min-height: 100px; resize: vertical; }
         .user-info { background: #e8f4f8; padding: 0.8rem; border-radius: 5px; margin-bottom: 1rem; color: #2c3e50; }
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
-        .modal-content { background: white; margin: 10% auto; padding: 2rem; border-radius: 10px; max-width: 400px; }
-        .modal.show { display: block; }
+        .user-info strong { color: #3498db; }
+        .flash { padding: 1rem; margin-bottom: 1rem; border-radius: 5px; }
+        .flash.success { background: #d4edda; color: #155724; }
+        .flash.error { background: #f8d7da; color: #721c24; }
+        .login-required { background: #fff3cd; padding: 1.5rem; border-radius: 8px; text-align: center; color: #856404; border: 2px dashed #ffc107; }
+        .login-required a { color: #3498db; font-weight: 600; text-decoration: none; }
+        .login-required a:hover { text-decoration: underline; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
+        .modal.show { display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 2rem; border-radius: 10px; max-width: 500px; width: 90%; }
     </style>
 </head>
 <body>
@@ -64,11 +71,20 @@
             <li><a href="/logout">🚪 로그아웃</a></li>
             {% else %}
             <li><a href="/login">🔑 로그인</a></li>
+            <li><a href="/register">✍️ 회원가입</a></li>
             {% endif %}
         </ul>
     </nav>
 
     <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
         <div class="post-view">
             <h1 class="post-title">
                 {{ post['title'] }}
@@ -77,40 +93,38 @@
                 {% endif %}
             </h1>
             <div class="post-meta">
-                <span>👤 
-                    {% if post['user_id'] %}
-                        <a href="/user/{{ post['user_id'] }}">{{ post['author'] }}</a>
-                    {% else %}
-                        {{ post['author'] }}
-                    {% endif %}
-                </span>
-                <span style="margin-left: 1rem;">📅 {{ post['created_at'].strftime('%Y-%m-%d %H:%M') if post['created_at'].__class__.__name__ == 'datetime' else post['created_at'][:16] }}</span>
+                👤 
+                {% if post['user_id'] %}
+                    <a href="/user/{{ post['user_id'] }}">{{ post['author'] }}</a>
+                {% else %}
+                    {{ post['author'] }}
+                {% endif %}
+                | 📅 {{ post['created_at'].strftime('%Y-%m-%d %H:%M') if post['created_at'].__class__.__name__ == 'datetime' else post['created_at'][:16] }}
+                | 🌐 IP: {{ post['ip_address'] }}
             </div>
-            
-            <div class="post-content">{{ post['content']|safe }}</div>
-            
-            {% if post['cloudinary_url'] %}
+
+            {% if post['filename'] and post['cloudinary_url'] %}
             <div class="post-file">
-                <a href="{{ post['cloudinary_url'] }}" target="_blank">📎 {{ post['filename'] }}</a>
+                📎 첨부파일: <a href="{{ post['cloudinary_url'] }}" target="_blank">{{ post['filename'] }}</a>
             </div>
             {% endif %}
-            
+
+            <div class="post-content">{{ post['content']|safe }}</div>
+
             <div style="margin-top: 2rem; display: flex; gap: 1rem;">
-                <a href="/board/{{ post['board_type'] }}" class="btn">목록으로</a>
+                <a href="/board/{{ post['board_type'] }}" class="btn" style="background: #95a5a6;">목록으로</a>
                 {% if is_author %}
-                <a href="/post/{{ post['id'] }}/edit" class="btn" onclick="event.preventDefault(); document.getElementById('quickEditForm').submit();">수정</a>
-                <form id="quickEditForm" method="POST" action="/post/{{ post['id'] }}/edit" style="display: none;">
-                    <input type="hidden" name="password" value="logged_in">
-                </form>
+                <a href="/post/{{ post['id'] }}/edit" class="btn">수정</a>
+                <button onclick="openDeleteModal()" class="btn btn-danger">삭제</button>
                 {% else %}
                 <button onclick="openEditModal()" class="btn">수정</button>
-                {% endif %}
                 <button onclick="openDeleteModal()" class="btn btn-danger">삭제</button>
+                {% endif %}
             </div>
         </div>
 
         <div class="comments-section">
-            <h2>💬 댓글 ({{ comments|length }})</h2>
+            <h2>댓글 ({{ comments|length }})</h2>
             
             {% if comments %}
                 {% for comment in comments %}
@@ -127,26 +141,22 @@
                             </span>
                             <span class="comment-date">{{ comment['created_at'].strftime('%Y-%m-%d %H:%M') if comment['created_at'].__class__.__name__ == 'datetime' else comment['created_at'][:16] }}</span>
                         </div>
-                        <button onclick="openCommentDeleteModal({{ comment['id'] }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">삭제</button>
+                        <div>
+                            {% if session.get('user_id') %}
+                            <button onclick="toggleReplyForm({{ comment['id'] }})" class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; background: #3498db;">답글</button>
+                            {% endif %}
+                            <button onclick="openCommentDeleteModal({{ comment['id'] }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">삭제</button>
+                        </div>
                     </div>
                     <div class="comment-content">{{ comment['content'] }}</div>
-                    <div class="comment-actions">
-                        <button onclick="toggleReplyForm({{ comment['id'] }})" class="btn">답글</button>
-                    </div>
                     
-                    <div class="reply-form" id="reply-form-{{ comment['id'] }}">
+                    <!-- ⭐ 답글 작성 폼 - 로그인한 사용자만 표시 -->
+                    {% if session.get('user_id') %}
+                    <div id="reply-form-{{ comment['id'] }}" class="reply-form">
+                        <h4>답글 작성</h4>
                         <form method="POST" action="/post/{{ post['id'] }}/comment">
                             <input type="hidden" name="parent_id" value="{{ comment['id'] }}">
-                            {% if not session.get('user_id') %}
-                            <div class="form-group">
-                                <input type="text" name="author" placeholder="작성자" required>
-                            </div>
-                            <div class="form-group">
-                                <input type="password" name="password" placeholder="비밀번호" required>
-                            </div>
-                            {% else %}
                             <div class="user-info">✓ <strong>{{ session['username'] }}</strong>님으로 작성됩니다</div>
-                            {% endif %}
                             <div class="form-group">
                                 <textarea name="content" placeholder="답글 내용" required></textarea>
                             </div>
@@ -154,6 +164,7 @@
                             <button type="button" onclick="toggleReplyForm({{ comment['id'] }})" class="btn" style="background: #95a5a6;">취소</button>
                         </form>
                     </div>
+                    {% endif %}
                     
                     {% if comment['replies'] %}
                         {% for reply in comment['replies'] %}
@@ -180,32 +191,30 @@
                 {% endfor %}
             {% endif %}
             
+            <!-- ⭐ 댓글 작성 폼 - 로그인한 사용자만 표시 -->
             <div class="comment-form">
                 <h3>댓글 작성</h3>
+                {% if session.get('user_id') %}
                 <form method="POST" action="/post/{{ post['id'] }}/comment">
-                    {% if not session.get('user_id') %}
-                    <div class="form-group">
-                        <input type="text" name="author" placeholder="작성자" required>
-                    </div>
-                    <div class="form-group">
-                        <input type="password" name="password" placeholder="비밀번호" required>
-                    </div>
-                    {% else %}
                     <div class="user-info">✓ <strong>{{ session['username'] }}</strong>님으로 작성됩니다</div>
-                    {% endif %}
                     <div class="form-group">
                         <textarea name="content" placeholder="댓글 내용" required></textarea>
                     </div>
                     <button type="submit" class="btn">댓글 작성</button>
                 </form>
+                {% else %}
+                <div class="login-required">
+                    🔒 댓글을 작성하려면 <a href="/login">로그인</a>이 필요합니다.
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
 
-    {% if not is_author %}
     <div id="editModal" class="modal">
         <div class="modal-content">
             <h2>게시글 수정</h2>
+            <p style="color: #666; margin-bottom: 1rem;">게시글 작성 시 사용한 비밀번호를 입력하세요.</p>
             <form method="POST" action="/post/{{ post['id'] }}/edit">
                 <div class="form-group">
                     <label>비밀번호</label>
@@ -216,16 +225,13 @@
             </form>
         </div>
     </div>
-    {% endif %}
 
     <div id="deleteModal" class="modal">
         <div class="modal-content">
             <h2>게시글 삭제</h2>
+            <p style="color: #e74c3c; margin-bottom: 1rem;">⚠️ 게시글을 삭제하면 복구할 수 없습니다.</p>
             <form method="POST" action="/post/{{ post['id'] }}/delete">
-                {% if is_author %}
-                <input type="hidden" name="password" value="logged_in">
-                <p>정말 삭제하시겠습니까?</p>
-                {% else %}
+                {% if not is_author %}
                 <div class="form-group">
                     <label>비밀번호</label>
                     <input type="password" name="password" required>
@@ -240,6 +246,7 @@
     <div id="commentDeleteModal" class="modal">
         <div class="modal-content">
             <h2>댓글 삭제</h2>
+            <p style="color: #e74c3c; margin-bottom: 1rem;">⚠️ 댓글을 삭제하면 복구할 수 없습니다.</p>
             <form id="commentDeleteForm" method="POST">
                 <div class="form-group">
                     <label>비밀번호</label>
