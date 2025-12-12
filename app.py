@@ -658,6 +658,37 @@ def board(board_type):
     
     return render_template('board.html', posts=posts, board_type=board_type, board_name=board_name)
 
+@app.route('/upload-image', methods=['POST'])
+@login_required
+def upload_image():
+    """Quill 에디터용 이미지 업로드 API"""
+    if 'image' not in request.files:
+        return jsonify({'error': '이미지 파일이 없습니다.'}), 400
+
+    file = request.files['image']
+
+    if file.filename == '':
+        return jsonify({'error': '파일이 선택되지 않았습니다.'}), 400
+
+    try:
+        # Cloudinary에 업로드
+        filename = secure_filename(file.filename)
+        upload_result = cloudinary.uploader.upload(
+            file,
+            folder="nvidia8th_board/content_images",
+            resource_type="image"
+        )
+
+        # 업로드된 이미지 URL 반환
+        return jsonify({
+            'success': True,
+            'url': upload_result['secure_url']
+        })
+
+    except Exception as e:
+        print(f"❌ 이미지 업로드 실패: {str(e)}")
+        return jsonify({'error': f'업로드 실패: {str(e)}'}), 500
+
 @app.route('/write/<board_type>', methods=['GET', 'POST'])
 def write(board_type):
     if board_type not in ['free', 'project', 'share']:
