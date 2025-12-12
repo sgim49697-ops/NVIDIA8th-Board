@@ -63,6 +63,18 @@ def get_client_ip():
         return request.headers.get('X-Forwarded-For').split(',')[0].strip()
     return request.remote_addr
 
+def extract_first_image(html_content):
+    """HTML 콘텐츠에서 첫 번째 이미지 URL 추출"""
+    if not html_content:
+        return None
+
+    img_pattern = r'<img[^>]+src=["\']([^"\']+)["\']'
+    match = re.search(img_pattern, html_content, re.IGNORECASE)
+
+    if match:
+        return match.group(1)
+    return None
+
 def login_required(f):
     """로그인 필요 데코레이터"""
     @wraps(f)
@@ -575,7 +587,20 @@ def board(board_type):
         (board_type,)
     )
     posts = [dict(row) for row in cursor.fetchall()]
-    
+
+    # ⭐ 썸네일 우선순위 적용: 본문 이미지 → 첨부 파일
+    for post in posts:
+        # 1순위: 본문 첫 이미지
+        content_image = extract_first_image(post.get('content', ''))
+
+        if content_image:
+            post['thumbnail'] = content_image
+        elif post.get('cloudinary_url'):
+            # 2순위: 첨부 파일
+            post['thumbnail'] = post['cloudinary_url']
+        else:
+            post['thumbnail'] = None
+
     cursor.close()
     conn.close()
     
