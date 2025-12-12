@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from flask_mail import Mail, Message
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired
 from functools import wraps
 import os
@@ -12,7 +11,7 @@ import cloudinary.uploader
 import psycopg2
 from dotenv import load_dotenv
 from psycopg2.extras import RealDictCursor
-import requests  # Slack Webhook용 추가
+import requests  # Slack Webhook + SendGrid API용
 
 load_dotenv()
 
@@ -35,23 +34,16 @@ if not DATABASE_URL:
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Flask-Mail 설정 (Optional - Slack을 우선 사용)
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME')
-app.config['MAIL_MAX_EMAILS'] = None
-app.config['MAIL_TIMEOUT'] = 30
+# SendGrid API 설정 (SMTP 대신 HTTP API 사용 - Render 호환)
+SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
+SENDGRID_FROM_EMAIL = os.environ.get('SENDGRID_FROM_EMAIL', 'noreply@nvidia8board.com')
 
-# 이메일 설정이 없어도 앱 실행 가능 (Slack 사용)
-if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
-    mail = Mail(app)
-    print("✅ Flask-Mail 설정 완료")
+if not SENDGRID_API_KEY:
+    print("⚠️ SENDGRID_API_KEY가 설정되지 않았습니다.")
+    print("⚠️ 이메일 발송 기능이 비활성화됩니다.")
 else:
-    mail = None
-    print("⚠️ Flask-Mail 미설정 (Slack Webhook 사용)")
+    print(f"✅ SendGrid API 설정 완료: {SENDGRID_FROM_EMAIL}")
+
 serializer = URLSafeTimedSerializer(app.secret_key)
 
 # Cloudinary 설정
@@ -81,7 +73,7 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def send_slack_notification(username, email, event_type="회원가입"):
+def send_slack_notification(username, email, event_type="회원가입", verified=False):
     """Slack Webhook으로 알림 전송"""
     webhook_url = os.environ.get('SLACK_WEBHOOK_URL')
     
@@ -92,15 +84,52 @@ def send_slack_notification(username, email, event_type="회원가입"):
     # 이벤트 타입에 따라 이모지 변경
     emoji_map = {
         "회원가입": "🎉",
+        "이메일인증": "✅",
         "새글작성": "📝",
-        "댓글작성": "💬",
-        "이메일인증": "✅"
+        "댓글작성": "💬"
     }
     emoji = emoji_map.get(event_type, "📢")
     
     # 현재 시각 (한국 시간으로 표시)
     now = datetime.now()
     time_str = now.strftime('%Y-%m-%d %H:%M:%S')
+    
+    # 인증 상태에 따른 메시지
+    if event_type == "회원가입":
+        status_text = "✅ 이메일 인증 완료" if verified else "⏳ 이메일 인증 대기"
+        status_emoji = "✅" if verified else "⏳"
+    else:
+        status_text = ""
+        status_emoji = ""
+    
+    # 메시지 구성
+    fields = [
+        {
+            "type": "mrkdwn",
+            "text": f"*아이디:*\n{username}"
+        },
+        {
+            "type": "mrkdwn",
+            "text": f"*이메일:*\n{email}"
+        }
+    ]
+    
+    if status_text:
+        fields.extend([
+            {
+                "type": "mrkdwn",
+                "text": f"*상태:*\n{status_emoji} {status_text}"
+            },
+            {
+                "type": "mrkdwn",
+                "text": f"*시각:*\n{time_str}"
+            }
+        ])
+    else:
+        fields.append({
+            "type": "mrkdwn",
+            "text": f"*시각:*\n{time_str}"
+        })
     
     message = {
         "text": f"{emoji} {event_type} 알림",
@@ -115,29 +144,7 @@ def send_slack_notification(username, email, event_type="회원가입"):
             },
             {
                 "type": "section",
-                "fields": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*아이디:*\n{username}"
-                    },
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*이메일:*\n{email}"
-                    }
-                ]
-            },
-            {
-                "type": "section",
-                "fields": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*시각:*\n{time_str}"
-                    },
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*이벤트:*\n{event_type}"
-                    }
-                ]
+                "fields": fields
             },
             {
                 "type": "actions",
@@ -172,6 +179,115 @@ def send_slack_notification(username, email, event_type="회원가입"):
         return False
     except Exception as e:
         print(f"❌ Slack 알림 오류: {type(e).__name__}: {str(e)}")
+        return False
+
+def send_verification_email(username, email, token):
+    """SendGrid API를 사용한 인증 이메일 발송 (HTTP API - Render 호환)"""
+    
+    if not SENDGRID_API_KEY:
+        print("⚠️ SENDGRID_API_KEY 미설정: 이메일 발송 건너뜀")
+        return False
+    
+    # 인증 링크 생성
+    confirm_url = url_for('confirm_email', token=token, _external=True)
+    
+    # SendGrid API 요청
+    url = "https://api.sendgrid.com/v3/mail/send"
+    headers = {
+        "Authorization": f"Bearer {SENDGRID_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "personalizations": [
+            {
+                "to": [{"email": email}],
+                "subject": "NVIDIA 8th 게시판 - 이메일 인증"
+            }
+        ],
+        "from": {
+            "email": SENDGRID_FROM_EMAIL,
+            "name": "NVIDIA 8th Board"
+        },
+        "content": [
+            {
+                "type": "text/plain",
+                "value": f"""
+안녕하세요 {username}님,
+
+NVIDIA 8th 게시판 가입을 환영합니다!
+
+아래 링크를 클릭하여 이메일을 인증해주세요:
+{confirm_url}
+
+※ 이 링크는 1시간 동안 유효합니다.
+
+감사합니다.
+NVIDIA 8th Board
+"""
+            },
+            {
+                "type": "text/html",
+                "value": f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                   color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+        .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }}
+        .button {{ display: inline-block; padding: 15px 30px; background: #667eea;
+                  color: white; text-decoration: none; border-radius: 5px; 
+                  font-weight: bold; margin: 20px 0; }}
+        .button:hover {{ background: #5568d3; }}
+        .footer {{ text-align: center; margin-top: 20px; color: #666; font-size: 12px; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎉 가입을 환영합니다!</h1>
+        </div>
+        <div class="content">
+            <p>안녕하세요 <strong>{username}</strong>님,</p>
+            <p>NVIDIA 8th 게시판 가입을 환영합니다!</p>
+            <p>아래 버튼을 클릭하여 이메일 인증을 완료해주세요:</p>
+            <p style="text-align: center;">
+                <a href="{confirm_url}" class="button">이메일 인증하기</a>
+            </p>
+            <p><small>※ 이 링크는 1시간 동안 유효합니다.</small></p>
+            <p>감사합니다.<br>NVIDIA 8th Board 팀</p>
+        </div>
+        <div class="footer">
+            <p>이 이메일은 NVIDIA 8th Board에서 자동으로 발송되었습니다.</p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+            }
+        ]
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        
+        if response.status_code == 202:  # SendGrid 성공 코드
+            print(f"✅ SendGrid 이메일 발송 성공: {email}")
+            return True
+        else:
+            print(f"❌ SendGrid 이메일 발송 실패: {response.status_code}")
+            print(f"   Response: {response.text}")
+            return False
+            
+    except requests.exceptions.Timeout:
+        print(f"⚠️ SendGrid API 타임아웃 (10초 초과)")
+        return False
+    except Exception as e:
+        print(f"❌ SendGrid API 오류: {type(e).__name__}: {str(e)}")
         return False
 
 def init_db():
@@ -257,21 +373,29 @@ def register():
         cursor = conn.cursor()
         
         try:
-            # ⭐ 이메일 인증 없이 바로 가입 완료 (email_verified=TRUE)
+            # ⭐ 이메일 인증 필요 (email_verified=FALSE)
             cursor.execute('''
                 INSERT INTO users (username, email, password, verification_token, email_verified)
                 VALUES (%s, %s, %s, %s, %s)
-            ''', (username, email, password_hash, token, True))
+            ''', (username, email, password_hash, token, False))
             
             conn.commit()
             
-            # ⭐ Slack으로 관리자에게 알림 (비동기, 실패해도 가입 완료)
+            # ⭐ 1. Slack 알림 (관리자용 - 실패해도 OK)
             try:
                 send_slack_notification(username, email, "회원가입")
             except Exception as slack_error:
-                print(f"⚠️ Slack 알림 실패: {slack_error}")
+                print(f"⚠️ Slack 알림 실패 (무시): {slack_error}")
             
-            flash('🎉 회원가입이 완료되었습니다! 바로 로그인하세요.', 'success')
+            # ⭐ 2. SendGrid 이메일 발송 (사용자 인증용 - HTTP API 사용)
+            email_sent = send_verification_email(username, email, token)
+            
+            # ⭐ 사용자 피드백
+            if email_sent:
+                flash('📧 인증 이메일이 발송되었습니다! 이메일을 확인하여 인증을 완료해주세요.', 'success')
+            else:
+                flash('⚠️ 회원가입은 완료되었으나 인증 이메일 발송에 실패했습니다. 관리자에게 문의하세요.', 'warning')
+            
             return redirect(url_for('login'))
             
         except Exception as e:
@@ -307,7 +431,17 @@ def confirm_email(token):
         return redirect(url_for('register'))
     
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
+    # 사용자 정보 가져오기 (Slack 알림용)
+    cursor.execute('SELECT username, email FROM users WHERE email = %s', (email,))
+    user = cursor.fetchone()
+    
+    if not user:
+        flash('사용자를 찾을 수 없습니다.', 'error')
+        cursor.close()
+        conn.close()
+        return redirect(url_for('register'))
     
     cursor.execute('''
         UPDATE users 
@@ -319,7 +453,13 @@ def confirm_email(token):
     cursor.close()
     conn.close()
     
-    flash('이메일 인증이 완료되었습니다. 로그인해주세요.', 'success')
+    # ⭐ Slack 알림: 이메일 인증 완료
+    try:
+        send_slack_notification(user['username'], email, "이메일인증", verified=True)
+    except Exception as slack_error:
+        print(f"⚠️ Slack 알림 실패 (무시): {slack_error}")
+    
+    flash('✅ 이메일 인증이 완료되었습니다! 로그인해주세요.', 'success')
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
