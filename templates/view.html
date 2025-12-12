@@ -100,7 +100,6 @@
                     {{ post['author'] }}
                 {% endif %}
                 | 📅 {{ post['created_at']|kst }}
-                | 🌐 IP: {{ post['ip_address'] }}
             </div>
 
             {% if post['filename'] and post['cloudinary_url'] %}
@@ -231,7 +230,10 @@
             <h2>게시글 삭제</h2>
             <p style="color: #e74c3c; margin-bottom: 1rem;">⚠️ 게시글을 삭제하면 복구할 수 없습니다.</p>
             <form method="POST" action="/post/{{ post['id'] }}/delete">
-                {% if not is_author %}
+                {% if is_author %}
+                <input type="hidden" name="password" value="logged_in">
+                <p>정말 삭제하시겠습니까?</p>
+                {% else %}
                 <div class="form-group">
                     <label>비밀번호</label>
                     <input type="password" name="password" required>
