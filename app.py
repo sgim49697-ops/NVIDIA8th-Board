@@ -853,7 +853,7 @@ def update_post(post_id):
 
 @app.route('/post/<int:post_id>/delete', methods=['POST'])
 def delete_post(post_id):
-    password = request.form['password']
+    password = request.form.get('password', '')  # ← 안전하게 가져오기
     
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -864,17 +864,20 @@ def delete_post(post_id):
     if post is None:
         cursor.close()
         conn.close()
-        return "게시글을 찾을 수 없습니다.", 404
+        flash('게시글을 찾을 수 없습니다.', 'error')
+        return redirect(url_for('index'))
     
     post = dict(post)
     
     # 권한 확인
     is_admin = password == ADMIN_PASSWORD
     is_author = False
-    
+
+    # 1순위: 로그인한 본인이 쓴 글
     if post['user_id'] and 'user_id' in session and post['user_id'] == session['user_id']:
         is_author = True
-    elif post['password']:
+    # 2순위: 익명 글 + 비밀번호 일치
+    elif post['password'] and password:
         is_author = check_password_hash(post['password'], password)
     
     if not (is_admin or is_author):
@@ -962,9 +965,11 @@ def delete_comment(comment_id):
     is_admin = password == ADMIN_PASSWORD
     is_author = False
     
+    # 1순위: 로그인한 본인이 쓴 댓글
     if comment['user_id'] and 'user_id' in session and comment['user_id'] == session['user_id']:
         is_author = True
-    elif comment['password']:
+    # 2순위: 익명 댓글 + 비밀번호 일치
+    elif comment['password'] and password:
         is_author = check_password_hash(comment['password'], password)
     
     if not (is_admin or is_author):
