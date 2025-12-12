@@ -12,6 +12,7 @@ import cloudinary.uploader
 import psycopg2
 from dotenv import load_dotenv
 from psycopg2.extras import RealDictCursor
+import requests  # Slack Webhook용 추가
 
 load_dotenv()
 
@@ -34,20 +35,23 @@ if not DATABASE_URL:
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Flask-Mail 설정
+# Flask-Mail 설정 (Optional - Slack을 우선 사용)
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 465
+app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_MAX_EMAILS'] = None
-app.config['MAIL_TIMEOUT'] = 120  # 타임아웃 30초 설정
+app.config['MAIL_TIMEOUT'] = 30
 
-if not app.config['MAIL_USERNAME'] or not app.config['MAIL_PASSWORD']:
-    raise ValueError("❌ MAIL_USERNAME 또는 MAIL_PASSWORD 환경변수가 설정되지 않았습니다!")
-
-mail = Mail(app)
+# 이메일 설정이 없어도 앱 실행 가능 (Slack 사용)
+if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
+    mail = Mail(app)
+    print("✅ Flask-Mail 설정 완료")
+else:
+    mail = None
+    print("⚠️ Flask-Mail 미설정 (Slack Webhook 사용)")
 serializer = URLSafeTimedSerializer(app.secret_key)
 
 # Cloudinary 설정
@@ -76,6 +80,99 @@ def login_required(f):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
+
+def send_slack_notification(username, email, event_type="회원가입"):
+    """Slack Webhook으로 알림 전송"""
+    webhook_url = os.environ.get('SLACK_WEBHOOK_URL')
+    
+    if not webhook_url:
+        print("⚠️ SLACK_WEBHOOK_URL이 설정되지 않았습니다. Slack 알림을 건너뜁니다.")
+        return False
+    
+    # 이벤트 타입에 따라 이모지 변경
+    emoji_map = {
+        "회원가입": "🎉",
+        "새글작성": "📝",
+        "댓글작성": "💬",
+        "이메일인증": "✅"
+    }
+    emoji = emoji_map.get(event_type, "📢")
+    
+    # 현재 시각 (한국 시간으로 표시)
+    now = datetime.now()
+    time_str = now.strftime('%Y-%m-%d %H:%M:%S')
+    
+    message = {
+        "text": f"{emoji} {event_type} 알림",
+        "blocks": [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f"{emoji} {event_type} 알림",
+                    "emoji": True
+                }
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*아이디:*\n{username}"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*이메일:*\n{email}"
+                    }
+                ]
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*시각:*\n{time_str}"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*이벤트:*\n{event_type}"
+                    }
+                ]
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "🌐 사이트 방문",
+                            "emoji": True
+                        },
+                        "url": "https://nvidia8th-board.onrender.com/"
+                    }
+                ]
+            },
+            {
+                "type": "divider"
+            }
+        ]
+    }
+    
+    try:
+        response = requests.post(webhook_url, json=message, timeout=5)
+        if response.status_code == 200:
+            print(f"✅ Slack 알림 전송 성공: {event_type} - {username}")
+            return True
+        else:
+            print(f"❌ Slack 알림 실패: {response.status_code} - {response.text}")
+            return False
+    except requests.exceptions.Timeout:
+        print(f"⚠️ Slack 알림 타임아웃 (5초 초과)")
+        return False
+    except Exception as e:
+        print(f"❌ Slack 알림 오류: {type(e).__name__}: {str(e)}")
+        return False
 
 def init_db():
     """데이터베이스 초기화 (PostgreSQL 전용)"""
@@ -160,44 +257,38 @@ def register():
         cursor = conn.cursor()
         
         try:
+            # ⭐ 이메일 인증 없이 바로 가입 완료 (email_verified=TRUE)
             cursor.execute('''
-                INSERT INTO users (username, email, password, verification_token)
-                VALUES (%s, %s, %s, %s)
-            ''', (username, email, password_hash, token))
+                INSERT INTO users (username, email, password, verification_token, email_verified)
+                VALUES (%s, %s, %s, %s, %s)
+            ''', (username, email, password_hash, token, True))
             
             conn.commit()
             
-            # 이메일 발송을 별도로 try-except 처리
+            # ⭐ Slack으로 관리자에게 알림 (비동기, 실패해도 가입 완료)
             try:
-                # 인증 이메일 발송
-                confirm_url = url_for('confirm_email', token=token, _external=True)
-                msg = Message('NVIDIA 8th 게시판 - 이메일 인증', recipients=[email])
-                msg.body = f'''
-안녕하세요 {username}님,
-
-NVIDIA 8th 게시판 가입을 환영합니다!
-
-아래 링크를 클릭하여 이메일을 인증해주세요:
-{confirm_url}
-
-※ 이 링크는 1시간 동안 유효합니다.
-
-감사합니다.
-'''
-                mail.send(msg)
-                flash('인증 이메일이 발송되었습니다. 이메일을 확인해주세요.', 'success')
-                
-            except Exception as mail_error:
-                # 이메일 발송 실패해도 회원가입은 완료됨
-                print(f"❌ 이메일 발송 실패: {type(mail_error).__name__}: {str(mail_error)}")
-                flash('회원가입은 완료되었으나 인증 이메일 발송에 실패했습니다. 관리자에게 문의하세요.', 'warning')
+                send_slack_notification(username, email, "회원가입")
+            except Exception as slack_error:
+                print(f"⚠️ Slack 알림 실패: {slack_error}")
             
+            flash('🎉 회원가입이 완료되었습니다! 바로 로그인하세요.', 'success')
             return redirect(url_for('login'))
             
         except Exception as e:
             conn.rollback()
             print(f"❌ 회원가입 오류: {type(e).__name__}: {str(e)}")
-            flash(f'회원가입 실패: {str(e)}', 'error')
+            
+            # 에러 메시지 개선
+            error_msg = str(e)
+            if 'duplicate' in error_msg.lower() or 'unique' in error_msg.lower():
+                if 'username' in error_msg.lower():
+                    flash('이미 사용 중인 아이디입니다.', 'error')
+                elif 'email' in error_msg.lower():
+                    flash('이미 등록된 이메일입니다.', 'error')
+                else:
+                    flash('중복된 정보가 있습니다.', 'error')
+            else:
+                flash(f'회원가입 실패: {error_msg}', 'error')
         finally:
             cursor.close()
             conn.close()
