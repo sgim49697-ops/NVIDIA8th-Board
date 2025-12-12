@@ -43,7 +43,7 @@
     <div class="container">
         <div class="profile-header">
             <h1>👤 {{ user['username'] }} <span class="badge">✓ 인증됨</span></h1>
-            <p class="date">가입일: {{ user['created_at'].strftime('%Y-%m-%d') if user['created_at'].__class__.__name__ == 'datetime' else user['created_at'][:10] }}</p>
+            <p class="date">가입일: {{ (user['created_at']|kst)[:10] }}</p>
         </div>
 
         <div class="section">
@@ -56,7 +56,7 @@
                         <span style="color: #999; font-size: 0.9rem;">[{{ '자유게시판' if post['board_type'] == 'free' else '프로젝트게시판' }}]</span>
                     </div>
                     <div class="item-meta">
-                        📅 {{ post['created_at'].strftime('%Y-%m-%d %H:%M') if post['created_at'].__class__.__name__ == 'datetime' else post['created_at'][:16] }}
+                        📅 {{ post['created_at']|kst }}
                     </div>
                 </div>
                 {% endfor %}
@@ -75,7 +75,7 @@
                     </div>
                     <div style="color: #666; margin: 0.5rem 0;">{{ comment['content'] }}</div>
                     <div class="item-meta">
-                        📅 {{ comment['created_at'].strftime('%Y-%m-%d %H:%M') if comment['created_at'].__class__.__name__ == 'datetime' else comment['created_at'][:16] }}
+                        📅 {{ comment['created_at']|kst }}
                     </div>
                 </div>
                 {% endfor %}

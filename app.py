@@ -5,7 +5,7 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired
 from functools import wraps
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import cloudinary
 import cloudinary.uploader
 import psycopg2
@@ -45,6 +45,18 @@ else:
     print(f"✅ SendGrid API 설정 완료: {SENDGRID_FROM_EMAIL}")
 
 serializer = URLSafeTimedSerializer(app.secret_key)
+
+
+# ⭐ Jinja2 필터: UTC → KST(한국 시간) 변환
+@app.template_filter('kst')
+def convert_to_kst(utc_time):
+    """UTC 시간을 한국 시간(KST, UTC+9)으로 변환"""
+    if utc_time is None:
+        return ''
+
+    # UTC+9 (한국 시간)
+    kst_time = utc_time + timedelta(hours=9)
+    return kst_time.strftime('%Y-%m-%d %H:%M:%S')
 
 # Cloudinary 설정
 cloudinary.config(
@@ -581,11 +593,16 @@ def board(board_type):
     
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
-    
-    cursor.execute(
-        'SELECT * FROM posts WHERE board_type = %s ORDER BY created_at DESC',
-        (board_type,)
-    )
+
+    # ⭐ 댓글 수 포함해서 가져오기 (댓글 + 대댓글 모두)
+    cursor.execute('''
+            SELECT p.*, COUNT(c.id) as comment_count
+            FROM posts p
+            LEFT JOIN comments c ON p.id = c.post_id
+            WHERE p.board_type = %s
+            GROUP BY p.id
+            ORDER BY p.created_at DESC
+        ''', (board_type,))
     posts = [dict(row) for row in cursor.fetchall()]
 
     # ⭐ 썸네일 우선순위 적용: 본문 이미지 → 첨부 파일

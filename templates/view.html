@@ -99,7 +99,7 @@
                 {% else %}
                     {{ post['author'] }}
                 {% endif %}
-                | 📅 {{ post['created_at'].strftime('%Y-%m-%d %H:%M') if post['created_at'].__class__.__name__ == 'datetime' else post['created_at'][:16] }}
+                | 📅 {{ post['created_at']|kst }}
                 | 🌐 IP: {{ post['ip_address'] }}
             </div>
 
@@ -139,7 +139,7 @@
                                     {{ comment['author'] }}
                                 {% endif %}
                             </span>
-                            <span class="comment-date">{{ comment['created_at'].strftime('%Y-%m-%d %H:%M') if comment['created_at'].__class__.__name__ == 'datetime' else comment['created_at'][:16] }}</span>
+                            <span class="comment-date">{{ comment['created_at']|kst }}</span>
                         </div>
                         <div>
                             {% if session.get('user_id') %}
@@ -179,7 +179,7 @@
                                             {{ reply['author'] }}
                                         {% endif %}
                                     </span>
-                                    <span class="comment-date">{{ reply['created_at'].strftime('%Y-%m-%d %H:%M') if reply['created_at'].__class__.__name__ == 'datetime' else reply['created_at'][:16] }}</span>
+                                    <span class="comment-date">{{ reply['created_at']|kst }}</span>
                                 </div>
                                 <button onclick="openCommentDeleteModal({{ reply['id'] }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">삭제</button>
                             </div>
