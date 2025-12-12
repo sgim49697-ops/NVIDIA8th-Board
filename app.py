@@ -732,32 +732,51 @@ def view_post(post_id):
     
     return render_template('view.html', post=post, comments=comments, is_author=is_author)
 
-@app.route('/post/<int:post_id>/edit', methods=['POST'])
+
+@app.route('/post/<int:post_id>/edit', methods=['GET', 'POST'])
 def edit_post(post_id):
-    password = request.form['password']
-    
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
-    
+
     cursor.execute('SELECT * FROM posts WHERE id = %s', (post_id,))
     post = cursor.fetchone()
-    
+
     if post is None:
         cursor.close()
         conn.close()
-        return "게시글을 찾을 수 없습니다.", 404
-    
+        flash('게시글을 찾을 수 없습니다.', 'error')
+        return redirect(url_for('index'))
+
     post = dict(post)
-    
+
+    # GET 요청: 로그인한 사용자가 자기 글 수정
+    if request.method == 'GET':
+        # 로그인한 사용자가 본인 글인 경우
+        if post['user_id'] and 'user_id' in session and post['user_id'] == session['user_id']:
+            cursor.close()
+            conn.close()
+            return render_template('edit.html', post=post)
+        else:
+            # 익명 글이거나 다른 사람 글 → 비밀번호 필요
+            cursor.close()
+            conn.close()
+            flash('비밀번호 인증이 필요합니다.', 'error')
+            return redirect(url_for('view_post', post_id=post_id))
+
+    # POST 요청: 비밀번호 검증
+    password = request.form.get('password', '')
+
     # 권한 확인
     is_admin = password == ADMIN_PASSWORD
     is_author = False
-    
+
+    # 1순위: 로그인한 본인이 쓴 글
     if post['user_id'] and 'user_id' in session and post['user_id'] == session['user_id']:
         is_author = True
-    elif post['password']:
+    # 2순위: 익명 글 + 비밀번호 일치
+    elif post['password'] and password:
         is_author = check_password_hash(post['password'], password)
-    
+
     if not (is_admin or is_author):
         cursor.close()
         conn.close()
@@ -771,20 +790,21 @@ def edit_post(post_id):
 
 @app.route('/post/<int:post_id>/update', methods=['POST'])
 def update_post(post_id):
-    title = request.form['title']
-    content = request.form['content']
-    password = request.form['password']
+    title = request.form.get('title', '')  # ← 안전
+    content = request.form.get('content', '')  # ← 안전
+    password = request.form.get('password', '')  # ← 안전
     
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     
     cursor.execute('SELECT * FROM posts WHERE id = %s', (post_id,))
     post = cursor.fetchone()
-    
+
     if post is None:
         cursor.close()
         conn.close()
-        return "게시글을 찾을 수 없습니다.", 404
+        flash('게시글을 찾을 수 없습니다.', 'error')
+        return redirect(url_for('index'))
     
     post = dict(post)
     
