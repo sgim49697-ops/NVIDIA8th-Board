@@ -12,6 +12,7 @@ import psycopg2
 from dotenv import load_dotenv
 from psycopg2.extras import RealDictCursor
 import requests  # Slack Webhook + SendGrid API용
+import bleach  # XSS 방어용
 
 load_dotenv()
 
@@ -57,6 +58,35 @@ def convert_to_kst(utc_time):
     # UTC+9 (한국 시간)
     kst_time = utc_time + timedelta(hours=9)
     return kst_time.strftime('%Y-%m-%d %H:%M:%S')
+
+# ⭐ Jinja2 필터: HTML Sanitize (XSS 방어)
+@app.template_filter('sanitize')
+def sanitize_html(html):
+    """사용자 입력 HTML을 안전하게 정리 (XSS 방어)"""
+    if not html:
+        return ''
+
+    # 허용할 HTML 태그 (서식 유지용)
+    allowed_tags = [
+        'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'a', 'img',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'ul', 'ol', 'li', 'blockquote', 'code', 'pre',
+        'span', 'div', 'hr'
+    ]
+
+    # 허용할 속성
+    allowed_attrs = {
+        'a': ['href', 'title', 'target'],
+        'img': ['src', 'alt', 'width', 'height'],
+        '*': ['class']  # 모든 태그에 class 속성 허용
+    }
+
+    return bleach.clean(
+        html,
+        tags=allowed_tags,
+        attributes=allowed_attrs,
+        strip=True
+    )
 
 # Cloudinary 설정
 cloudinary.config(
@@ -586,10 +616,15 @@ def index():
 
 @app.route('/board/<board_type>')
 def board(board_type):
-    if board_type not in ['free', 'project']:
+    if board_type not in ['free', 'project', 'share']:
         return "잘못된 게시판입니다.", 404
-    
-    board_name = '자유게시판' if board_type == 'free' else '프로젝트게시판'
+
+    board_names = {
+        'free': '자유게시판',
+        'project': '프로젝트게시판',
+        'share': '공유게시판'
+    }
+    board_name = board_names.get(board_type, '게시판')
     
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -625,26 +660,25 @@ def board(board_type):
 
 @app.route('/write/<board_type>', methods=['GET', 'POST'])
 def write(board_type):
-    if board_type not in ['free', 'project']:
+    if board_type not in ['free', 'project', 'share']:
         return "잘못된 게시판입니다.", 404
-    
+
+    # ⭐ 로그인 필수 (익명 글쓰기 차단)
+    if 'user_id' not in session:
+        flash('글을 작성하려면 로그인이 필요합니다.', 'error')
+        return redirect(url_for('login'))
+
     if request.method == 'POST':
         title = request.form['title']
         content = request.form['content']
-        
+
         ip_address = get_client_ip()
         user_agent = request.headers.get('User-Agent', '')
-        
-        # 로그인 여부에 따라 처리
-        if 'user_id' in session:
-            user_id = session['user_id']
-            author = session['username']
-            password_hash = None
-        else:
-            user_id = None
-            author = request.form['author']
-            password = request.form['password']
-            password_hash = generate_password_hash(password)
+
+        # 로그인한 사용자 정보 사용
+        user_id = session['user_id']
+        author = session['username']
+        password_hash = None
         
         file = request.files.get('file')
         cloudinary_url = None
@@ -681,8 +715,13 @@ def write(board_type):
         
         flash('게시글이 작성되었습니다.', 'success')
         return redirect(url_for('board', board_type=board_type))
-    
-    board_name = '자유게시판' if board_type == 'free' else '프로젝트게시판'
+
+    board_names = {
+        'free': '자유게시판',
+        'project': '프로젝트게시판',
+        'share': '공유게시판'
+    }
+    board_name = board_names.get(board_type, '게시판')
     is_logged_in = 'user_id' in session
     return render_template('write.html', board_type=board_type, board_name=board_name, is_logged_in=is_logged_in)
 
@@ -926,27 +965,26 @@ def delete_post(post_id):
 
 @app.route('/post/<int:post_id>/comment', methods=['POST'])
 def add_comment(post_id):
+    # ⭐ 로그인 필수 (익명 댓글 차단)
+    if 'user_id' not in session:
+        flash('댓글을 작성하려면 로그인이 필요합니다.', 'error')
+        return redirect(url_for('login'))
+
     content = request.form['content']
     parent_id = request.form.get('parent_id')
-    
+
     if parent_id:
         parent_id = int(parent_id)
     else:
         parent_id = None
-    
+
     ip_address = get_client_ip()
     user_agent = request.headers.get('User-Agent', '')
-    
-    # 로그인 여부에 따라 처리
-    if 'user_id' in session:
-        user_id = session['user_id']
-        author = session['username']
-        password_hash = None
-    else:
-        user_id = None
-        author = request.form['author']
-        password = request.form['password']
-        password_hash = generate_password_hash(password)
+
+    # 로그인한 사용자 정보 사용
+    user_id = session['user_id']
+    author = session['username']
+    password_hash = None
     
     conn = get_db_connection()
     cursor = conn.cursor()

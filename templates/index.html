@@ -39,6 +39,7 @@
             <li><a href="/">🏠 홈</a></li>
             <li><a href="/board/free">💬 자유게시판</a></li>
             <li><a href="/board/project">📁 프로젝트게시판</a></li>
+            <li><a href="/board/share">🔗 공유게시판</a></li>
             {% if session.get('user_id') %}
             <li><a href="/user/{{ session['user_id'] }}">👤 {{ session['username'] }}</a></li>
             <li><a href="/logout">🚪 로그아웃</a></li>
@@ -76,6 +77,13 @@
                 <h2 class="board-title">프로젝트게시판</h2>
                 <p class="board-desc">진행 중인 프로젝트나 완성된 작품을 공유하는 공간입니다. 코드, 결과, 인사이트를 함께 나눠보세요!</p>
                 <a href="/board/project" class="btn">게시판 가기</a>
+            </div>
+
+            <div class="board-card">
+                <div class="board-icon">🔗</div>
+                <h2 class="board-title">공유게시판</h2>
+                <p class="board-desc">유용한 링크, 자료, 정보를 공유하는 공간입니다. 좋은 자료를 발견하면 함께 나눠보세요!</p>
+                <a href="/board/share" class="btn">게시판 가기</a>
             </div>
         </div>
 
